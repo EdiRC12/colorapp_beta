@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ColorApp - Controle de Cor e Processo</title>
+
+  <link rel="icon" type="image/png" href="https://andregazineu.github.io/colorapp/public/favicon.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+  <link rel="stylesheet" href="https://andregazineu.github.io/colorapp/src/css/style.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js/dist/umd/supabase.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <script src="https://andregazineu.github.io/colorapp/src/data/profiles.js"></script>
+
+  <!-- MODIFICAÇÃO: CSS para o novo layout otimizado dos botões -->
+  <style>
+    :root {
+      --cyan: #00AEEF;
+      --magenta: #EC008C;
+      --yellow: #FFF200;
+      --black: #231F20;
+      --special: #7f8c8d;
+      --success: #28a745;
+      --danger: #dc3545;
+      --warning: #ffc107;
+      --primary: #3498db;
+      --primary-dark: #2c3e50;
+      --text-light: #6c757d;
+      --active-red: #e74c3c;
+    }
+
+    .bobina-options-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 15px;
+      margin-top: 10px;
+      margin-bottom: 15px;
+      width: 100%;
+    }
+
+    .bobina-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .bobina-numbers-group {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+    }
+
+    .bobina-option-btn {
+      padding: 10px 5px;
+      font-size: 0.85rem;
+      background-color: var(--primary-dark);
+      color: var(--text-light);
+      border: 1px solid var(--primary-light);
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+      font-family: 'Poppins', sans-serif;
+      text-align: center;
+    }
+
+    .bobina-option-btn:hover {
+      background-color: var(--primary);
+    }
+
+    /* ADICIONE ISSO AO FINAL DO SEU CSS */
+    .tag-source {
+      display: inline-block;
+      padding: 2px 6px;
+      font-size: 0.75rem;
+      border-radius: 4px;
+      margin-left: 8px;
+      vertical-align: middle;
+      font-weight: 600;
+    }
+
+    .tag-product {
+      background: #e0f7fa;
+      color: #006064;
+      border: 1px solid #b2ebf2;
+    }
+
+    .tag-pantone {
+      background: #fff3e0;
+      color: #e65100;
+      border: 1px solid #ffe0b2;
+    }
+
+    /* Container para gráficos do Relatório Gerencial */
+    .report-chart-container {
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 20px;
+      margin-top: 30px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08);
+      border: 1px solid #eef2f7;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .report-chart-header {
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #3498db;
+      font-size: 1.1rem;
+    }
+
+    .chart-wrapper-fixed {
+      position: relative;
+      height: 400px;
+      width: 100%;
+    }
+
+    /* ==============================================
+       PROCESS STANDARDS REGISTER - PREMIUM CARDS
+       ============================================== */
+
+    .register-header {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 25px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #3498db;
+    }
+
+    .register-header h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      color: #2c3e50;
+    }
+
+    .register-product-field {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #f8f9fa;
+      padding: 8px 15px;
+      border-radius: 8px;
+      border: 1px solid #dee2e6;
+    }
+
+    .register-product-field label {
+      font-weight: 600;
+      margin: 0;
+      color: #495057;
+      text-transform: none;
+      font-size: 0.9rem;
+    }
+
+    .register-product-field input {
+      border: none;
+      background: transparent;
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: #0d6efd;
+      width: 120px;
+      margin: 0;
+      outline: none;
+    }
+
+    .register-cards-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+
+    @media (max-width: 600px) {
+      .register-cards-container {
+        grid-template-columns: 1fr;
+      }
+
+      .inputs-triple {
+        grid-template-columns: 1fr;
+        gap: 5px;
+      }
+
+      .register-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .register-product-field {
+        width: 100%;
+        justify-content: space-between;
+      }
+    }
+
+    .color-card-premium {
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+      border: 1px solid #eef2f7;
+      overflow: hidden;
+      transition: transform 0.2s, box-shadow 0.2s;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .color-card-premium:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+    }
+
+    .color-card-header {
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: white;
+      font-weight: 700;
+      font-size: 1rem;
+    }
+
+    .color-card-header i {
+      margin-right: 8px;
+    }
+
+    .color-card-body {
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .input-row-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .input-row-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #6c757d;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .inputs-triple {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+
+    .inputs-triple input {
+      width: 100%;
+      text-align: center;
+      padding: 8px;
+      border: 1px solid #ced4da;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    .inputs-triple input:focus {
+      border-color: #3498db;
+      box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+      outline: none;
+    }
+
+    .equip-inputs {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .equip-inputs input {
+      padding: 8px 12px;
+      border: 1px solid #ced4da;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      margin: 0;
+    }
+
+    /* Cores CMYK */
+    .card-cyan .color-card-header {
+      background: #00baef;
+    }
+
+    .card-magenta .color-card-header {
+      background: #e83f8c;
+    }
+
+    .card-yellow .color-card-header {
+      background: #ffc107;
+      color: #212529;
+    }
+
+    .card-black .color-card-header {
+      background: #343a40;
+    }
+
+    .card-special .color-card-header {
+      background: #6c757d;
+    }
+
+    .btn-remove-card {
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      color: white;
+      border-radius: 4px;
+      width: 28px;
+      height: 28px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+
+    .btn-remove-card:hover {
+      background: rgba(220, 53, 69, 0.8);
+    }
+
+    .special-name-input {
+      background: rgba(255, 255, 255, 0.9) !important;
+      color: #333 !important;
+      border: none;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 0.9rem;
+      width: 150px;
+    }
+
+    .opacity-card-premium {
+      background: #f1f8ff;
+      border: 2px dashed #3498db;
+      grid-column: 1 / -1;
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .opacity-title {
+      font-weight: 700;
+      color: #0366d6;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.1rem;
+    }
+
+    .register-footer-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    .btn-add-special-premium {
+      background: white;
+      color: #3498db;
+      border: 2px solid #3498db;
+      padding: 10px 25px;
+      border-radius: 50px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-add-special-premium:hover {
+      background: #3498db;
+      color: white;
+    }
+
+    .btn-save-premium {
+      background: #28a745;
+      color: white;
+      border: none;
+      padding: 15px 40px;
+      border-radius: 8px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 4px 6px rgba(40, 167, 69, 0.2);
+      transition: all 0.2s;
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .btn-save-premium:hover {
+      background: #218838;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(40, 167, 69, 0.3);
+    }
+
+    /* INSPECTION TAB - CARDS & HEADER */
+    .inspection-header-card {
+      background: #ffffff;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+      border: 1px solid #eef2f7;
+      margin-bottom: 25px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+    }
+
+    .inspection-header-card .input-group {
+      margin-bottom: 0;
+    }
+
+    .inspection-header-card input {
+      width: 100%;
+      padding: 10px;
+      font-size: 1rem;
+      border: 1px solid #ced4da;
+      border-radius: 6px;
+      font-weight: 600;
+      color: #2c3e50;
+    }
+
+    .inspection-cards-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+
+    .inspection-card {
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+      border: 1px solid #eef2f7;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .inspection-card-header {
+      padding: 12px 18px;
+      color: white;
+      font-weight: 700;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .inspection-card-header .color-name {
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .inspection-card-header .status-indicator {
+      font-size: 0.8rem;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .inspection-card-body {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .inspection-section-title {
+      font-size: 0.8rem;
+      font-weight: 800;
+      color: #6c757d;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .inspection-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      align-items: flex-end;
+    }
+
+    .inspection-field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .inspection-field label {
+      font-size: 0.7rem;
+      color: #a0aec0;
+      font-weight: 600;
+    }
+
+    .inspection-field .target-val {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #2d3748;
+      background: #f7fafc;
+      padding: 8px;
+      border-radius: 6px;
+      text-align: center;
+    }
+
+    .inspection-field input {
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #cbd5e0;
+      font-weight: 700;
+      text-align: center;
+      font-size: 1rem;
+    }
+
+    .inspection-field input:focus {
+      border-color: #3182ce;
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.2);
+    }
+
+    .inspection-card-footer {
+      background: #f8fafc;
+      padding: 10px 18px;
+      font-size: 0.75rem;
+      color: #718096;
+      border-top: 1px solid #edf2f7;
+    }
+
+    .inspection-card.pass {
+      border-top: 5px solid #28a745;
+    }
+
+    .inspection-card.fail {
+      border-top: 5px solid #dc3545;
+    }
+
+    .inspection-card.pending {
+      border-top: 5px solid #cbd5e0;
+    }
+
+    .inspection-card.pass .status-indicator {
+      background: #28a745;
+    }
+
+    .inspection-card.fail .status-indicator {
+      background: #dc3545;
+    }
+  </style>
+</head>
+
+<body>
+  <button class="back-button-fixed" id="fixedbackbutton" style="display:none;" onclick="goback()">⬅ Voltar</button>
+
+  <div class="main-container">
+    <div class="nav-tabs">
+      <div class="nav-tab active" onclick="showTab('search')">Pesquisar Cor</div>
+      <div class="nav-tab" onclick="showTab('database-color')">Inspeções de Cor</div>
+      <div class="nav-tab" onclick="showTab('pantone-search')">Pesquisar Pantone</div>
+      <div class="nav-tab" onclick="showTab('register')">Cadastrar Produto</div>
+      <div class="nav-tab" onclick="showTab('deltacalculator')">Diagnóstico de Cor</div>
+      <div class="nav-tab" onclick="showTab('bestmatch')">Melhor Correspondência</div>
+      <div class="nav-tab" onclick="showTab('process-control')">Inspecionar CMYK</div>
+      <div class="nav-tab" onclick="showTab('database-process')">Resultados CMYK</div>
+      <div class="nav-tab" onclick="showTab('report')">Relatório Gerencial</div>
+      <div class="nav-tab" onclick="showTab('process-register')">CADASTRO CMYK</div>
+      <div class="nav-tab" onclick="showTab('profiles-history')">Perfis Históricos</div>
+    </div>
+
+    <div id="search-tab" class="tab-content active">
+      <h1>Pesquisar Cores de Produtos</h1>
+      <div class="input-group">
+        <label for="productcode">Código do Produto:</label>
+        <input type="text" id="productcode" placeholder="Digite o código do produto...">
+      </div>
+      <button onclick="searchproducts()">Pesquisar</button>
+      <div class="results" id="results"></div>
+      <div class="inspector" id="inspector">
+        <div class="color-samples">
+          <div class="color-box">
+            <div id="colorsampleref" class="color-sample"></div>
+            <span id="original-color-name">Cor Original</span>
+          </div>
+          <div class="color-box">
+            <div id="colorsamplesample" class="color-sample"></div>
+            <span>Cor Inspecionada</span>
+          </div>
+        </div>
+        <input type="number" id="labl" placeholder="Valor L" oninput="updatesamplecolor()">
+        <input type="number" id="laba" placeholder="Valor a" oninput="updatesamplecolor()">
+        <input type="number" id="labb" placeholder="Valor b" oninput="updatesamplecolor()">
+
+        <input type="text" id="bobinaid" placeholder="Clique ou digite a ID da Bobina">
+
+        <!-- MODIFICAÇÃO: Novo layout otimizado para os botões -->
+        <div class="bobina-options-grid">
+          <div class="bobina-group">
+            <button class="bobina-option-btn" onclick="setBobinaId('Acerto de Cor')">Acerto de Cor</button>
+            <button class="bobina-option-btn" onclick="setBobinaId('Reposição de Cor')">Reposição de Cor</button>
+            <button class="bobina-option-btn" onclick="setBobinaId('Pasta Padrão')">Pasta Padrão</button>
+            <button class="bobina-option-btn" onclick="setBobinaId('Múltiplo')">Múltiplo</button>
+          </div>
+          <div class="bobina-numbers-group">
+            <button class="bobina-option-btn" onclick="setBobinaId('1')">1</button>
+            <button class="bobina-option-btn" onclick="setBobinaId('2')">2</button>
+            <button class="bobina-option-btn" onclick="setBobinaId('3')">3</button>
+            <button class="bobina-option-btn" onclick="setBobinaId('4')">4</button>
+            <button class="bobina-option-btn" onclick="setBobinaId('5')">5</button>
+            <button class="bobina-option-btn" onclick="setBobinaId('6')">6</button>
+            <button class="bobina-option-btn" onclick="setBobinaId('7')">7</button>
+            <button class="bobina-option-btn" onclick="setBobinaId('8')">8</button>
+            <button class="bobina-option-btn" onclick="setBobinaId('9')">9</button>
+            <button class="bobina-option-btn" onclick="setBobinaId('10')">10</button>
+          </div>
+        </div>
+
+        <input type="number" id="opid" placeholder="Número da OP">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+          <input type="checkbox" id="fixarop" style="width: auto; height: auto;">
+          <label for="fixarop"
+            style="margin-bottom: 0; font-size: 0.9rem; color: var(--text-dark); text-transform: none;">Fixar OP</label>
+        </div>
+        <button onclick="inspectcolor()">Inspecionar</button>
+        <div id="resultmessage" class="result-message"></div>
+        <div class="color-difference">
+          <div id="deltal"></div>
+          <div id="deltaa"></div>
+          <div id="deltab"></div>
+        </div>
+        <button id="diagnostico-btn" class="btn-secondary" onclick="analyzeCurrentInspection()"
+          style="display: none; margin-top: 10px;">Diagnóstico de Cor</button>
+        <div class="back-button" onclick="goback()">Voltar</div>
+      </div>
+    </div>
+
+    <div id="database-color-tab" class="tab-content">
+      <h1>Banco de Dados de Inspeções de Cor</h1>
+      <div class="search-controls">
+        <div class="input-group">
+          <label for="databasesearch">Pesquisar Termo:</label>
+          <input type="text" id="databasesearch" placeholder="Produto, status, bobina, OP...">
+        </div>
+        <div class="input-group">
+          <label for="startDateFilter">Data Inicial:</label>
+          <input type="date" id="startDateFilter">
+        </div>
+        <div class="input-group">
+          <label for="endDateFilter">Data Final:</label>
+          <input type="date" id="endDateFilter">
+        </div>
+        <button onclick="searchdatabase()">Pesquisar</button>
+        <button class="btn-secondary" onclick="clearDatabaseFilters()">Limpar / Mostrar Todos</button>
+      </div>
+      <div class="table-container">
+        <table id="databasetable">
+          <thead>
+            <tr>
+              <th>Produto</th>
+              <th>Descrição</th>
+              <th>L Orig.</th>
+              <th>a Orig.</th>
+              <th>b Orig.</th>
+              <th>L Insp.</th>
+              <th>a Insp.</th>
+              <th>b Insp.</th>
+              <th>Delta E</th>
+              <th>Status</th>
+              <th>Data/Hora</th>
+              <th>Bobina</th>
+              <th>OP</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="databasebody"></tbody>
+        </table>
+      </div>
+      <div style="text-align: center; margin-top: 15px; margin-bottom: 20px;">
+        <button id="btnLoadMore" class="btn-secondary" onclick="loadMoreInspections()"
+          style="display: none; width: auto;">Carregar Mais</button>
+      </div>
+    </div>
+
+    <div id="register-tab" class="tab-content">
+      <h1>Cadastrar Novo Produto</h1>
+      <div class="input-group">
+        <label for="newproductname">Nome do Produto:</label>
+        <input type="text" id="newproductname" placeholder="Ex: 1426-AMARELO">
+      </div>
+      <div class="input-group">
+        <label for="newproductl">Valor L:</label>
+        <input type="number" id="newproductl" placeholder="0-100">
+      </div>
+      <div class="input-group">
+        <label for="newproducta">Valor a:</label>
+        <input type="number" id="newproducta" placeholder="-128 a 127">
+      </div>
+      <div class="input-group">
+        <label for="newproductb">Valor b:</label>
+        <input type="number" id="newproductb" placeholder="-128 a 127">
+      </div>
+      <div class="color-preview">
+        <div class="input-group">
+          <label>Prévia da Cor:</label>
+          <div id="newcolorpreview" class="color-sample" style="margin: 10px 0;"></div>
+        </div>
+      </div>
+      <button onclick="registernewproduct()">Cadastrar Produto</button>
+      <div id="registermessage" class="result-message"></div>
+      <div id="productslist">
+        <h2>Produtos Cadastrados</h2>
+        <div class="search-controls">
+          <div class="input-group">
+            <label for="productsearch">Pesquisar produtos cadastrados:</label>
+            <input type="text" id="productsearch" placeholder="Digite para pesquisar...">
+          </div>
+          <button onclick="searchproductsdb()">Pesquisar</button>
+          <button class="btn-secondary"
+            onclick="document.getElementById('productsearch').value=''; updateproductstable();">Mostrar Todos</button>
+        </div>
+        <div class="table-container">
+          <table id="productstable">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Descrição</th>
+                <th>L</th>
+                <th>a</th>
+                <th>b</th>
+                <th>Cor</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="productsbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="deltacalculator-tab" class="tab-content">
+      <h1>Ferramenta de Diagnóstico de Cor</h1>
+      <div class="calculator-layout">
+        <div class="inputs-wrapper">
+          <div class="color-column">
+            <div class="color-header">
+              <div class="preview-box" id="preview-padrao"></div>
+              <span class="title">Padrão (Alvo)</span>
+            </div>
+            <div class="lab-input-group">
+              <label for="l1_diag">L*</label>
+              <input id="l1_diag" type="number" value="35" step="0.1" oninput="updateDiagnosticPreviews()">
+            </div>
+            <div class="lab-input-group">
+              <label for="a1_diag">a*</label>
+              <input id="a1_diag" type="number" value="100" step="0.1" oninput="updateDiagnosticPreviews()">
+            </div>
+            <div class="lab-input-group">
+              <label for="b1_diag">b*</label>
+              <input id="b1_diag" type="number" value="80" step="0.1" oninput="updateDiagnosticPreviews()">
+            </div>
+          </div>
+          <div class="color-column">
+            <div class="color-header">
+              <div class="preview-box" id="preview-amostra"></div>
+              <span class="title">Amostra (Medida)</span>
+            </div>
+            <div class="lab-input-group">
+              <label for="l2_diag">L*</label>
+              <input id="l2_diag" type="number" value="80" step="0.1" oninput="updateDiagnosticPreviews()">
+            </div>
+            <div class="lab-input-group">
+              <label for="a2_diag">a*</label>
+              <input id="a2_diag" type="number" value="30" step="0.1" oninput="updateDiagnosticPreviews()">
+            </div>
+            <div class="lab-input-group">
+              <label for="b2_diag">b*</label>
+              <input id="b2_diag" type="number" value="40" step="0.1" oninput="updateDiagnosticPreviews()">
+            </div>
+          </div>
+          <button onclick="runColorDiagnostic()">Analisar Variação e Gerar Diagnóstico</button>
+        </div>
+        <div class="chart-container-wrapper">
+          <div id="chart-container">
+            <canvas id="lchChart"></canvas>
+          </div>
+        </div>
+      </div>
+      <div id="diagnostico-container">
+        <h2>Análise da Variação</h2>
+        <div class="diagnostico-content">
+          <div id="delta-info" class="delta-info"></div>
+          <div id="diagnostico-texto" class="diagnostico-texto"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="bestmatch-tab" class="tab-content">
+      <h1>Encontrar Melhor Correspondência</h1>
+      <div class="color-samples">
+        <div class="color-box">
+          <div id="bestmatch-input-sample" class="color-sample"></div>
+          <span>Cor de Entrada</span>
+        </div>
+      </div>
+      <div class="input-group">
+        <label for="l1">Valor L:</label>
+        <input type="number" id="l1" placeholder="0-100" oninput="updateinputcolorsample()">
+      </div>
+      <div class="input-group">
+        <label for="a1">Valor a:</label>
+        <input type="number" id="a1" placeholder="-128 a 127" oninput="updateinputcolorsample()">
+      </div>
+      <div class="input-group">
+        <label for="b1">Valor b:</label>
+        <input type="number" id="b1" placeholder="-128 a 127" oninput="updateinputcolorsample()">
+      </div>
+      <button onclick="findbestmatches()">Encontrar Correspondências</button>
+      <div id="bestmatches" class="results"></div>
+    </div>
+
+    <div id="process-control-tab" class="tab-content">
+      <h1><i class="fas fa-microscope"></i> INSPEÇÕES CMYK</h1>
+
+      <!-- Cabeçalho de Pesquisa Premium -->
+      <div class="inspection-header-card">
+        <div class="input-group">
+          <label for="pc_product_name"><i class="fas fa-search"></i> Código do Produto (ID)</label>
+          <input type="text" id="pc_product_name" placeholder="Ex: 0004"
+            onchange="loadProcessStandardsForProduct(this.value)" autocomplete="off">
+        </div>
+        <div class="input-group">
+          <label for="pc_op_number"><i class="fas fa-hashtag"></i> Número da OP</label>
+          <input type="text" id="pc_op_number" placeholder="Ex: 12345">
+        </div>
+        <div class="input-group">
+          <label for="pc_daughter_coil_id"><i class="fas fa-barcode"></i> ID Bobina Filha</label>
+          <input type="text" id="pc_daughter_coil_id" placeholder="Ex: BF-01">
+        </div>
+      </div>
+
+      <p id="current_profile_note_densities" style="font-size:0.85em; margin-bottom:20px; color:var(--text-light);">
+        Insira o código do produto para carregar os padrões de densidade e TVA.
+      </p>
+
+      <!-- Container para os Cartões de Inspeção de Cor (Gerados via JS) -->
+      <div id="inspection_cards_wrapper" class="inspection-cards-container"></div>
+
+      <!-- Container para o Cartão de Opacidade -->
+      <div id="opacity_inspection_wrapper" style="margin-top: 20px;"></div>
+
+      <div class="register-footer-actions" style="margin-top: 40px; justify-content: center;">
+        <button id="verifyAndSaveButton" class="btn-save-premium" onclick="handleVerificationAndSave()"
+          style="width: 100%; max-width: 400px;">
+          <i class="fas fa-check-double"></i> VERIFICAR E SALVAR INSPEÇÃO
+        </button>
+      </div>
+
+      <div id="processControlGlobalMessage" class="result-message" style="display:none; margin-top:20px;"></div>
+    </div>
+
+    <div id="database-process-tab" class="tab-content">
+      <h1>Histórico de Inspeções de Processo</h1>
+
+      <!-- Novo Filtro de Pesquisa Premium -->
+      <div class="controls-section" style="margin-bottom: 25px;">
+        <div class="input-group">
+          <label for="hist_process_search"><i class="fas fa-search"></i> Pesquisar Termo (Produto/OP)</label>
+          <input type="text" id="hist_process_search" placeholder="Digite o código ou OP...">
+        </div>
+        <div class="input-group">
+          <label for="hist_process_start"><i class="fas fa-calendar-alt"></i> Data Inicial</label>
+          <input type="date" id="hist_process_start">
+        </div>
+        <div class="input-group">
+          <label for="hist_process_end"><i class="fas fa-calendar-alt"></i> Data Final</label>
+          <input type="date" id="hist_process_end">
+        </div>
+        <button onclick="fetchAndDisplayProcessInspections()" style="width: auto;"><i class="fas fa-filter"></i>
+          Filtrar</button>
+        <button class="btn-secondary" onclick="clearProcessFilters()" style="width: auto;"><i class="fas fa-eraser"></i>
+          Limpar</button>
+      </div>
+
+      <div class="table-container">
+        <table id="inspectionsTable">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>OP</th>
+              <th>Produto</th>
+              <th>Descrição</th>
+              <th>Bobina Filha</th>
+              <th>Status</th>
+              <th>Dens C</th>
+              <th>Dens M</th>
+              <th>Dens Y</th>
+              <th>Dens K</th>
+              <th>TVA C</th>
+              <th>TVA M</th>
+              <th>TVA Y</th>
+              <th>TVA K</th>
+              <th>Opac.</th>
+            </tr>
+          </thead>
+          <tbody id="inspectionsTbody">
+            <tr>
+              <td colspan="15" style="text-align:center;">Carregando dados...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="report-tab" class="tab-content">
+      <h1>Relatório Gerencial - Delta E por Produto</h1>
+      <div class="controls-section">
+        <div class="input-group">
+          <label for="reportStartDate">Data Inicial:</label>
+          <input type="date" id="reportStartDate" />
+        </div>
+        <div class="input-group">
+          <label for="reportEndDate">Data Final:</label>
+          <input type="date" id="reportEndDate" />
+        </div>
+        <div class="input-group">
+          <label for="reportOp">OP (obrigatório p/ laudo):</label>
+          <input type="number" id="reportOp" placeholder="Número da OP" />
+        </div>
+        <div class="input-group" style="flex-direction: row; align-items: center; gap: 8px;">
+          <input type="checkbox" id="excludeAcertoCor" onchange="updateReportDisplay()"
+            style="width: 20px; height: 20px; margin: 0;">
+          <label for="excludeAcertoCor" style="margin: 0; white-space: nowrap;">Excluir "Acerto de Cor"</label>
+        </div>
+        <button id="generateReportBtn" onclick="generateReport()">Gerar Relatório</button>
+        <button id="downloadExcelBtn" class="btn-secondary" onclick="downloadExcel()" disabled>Baixar Excel</button>
+        <button id="generateLaudoBtn" class="btn-secondary" onclick="generateLaudo()">Gerar Laudo</button>
+      </div>
+      <div id="reportPeriod"
+        style="text-align: center; font-size: 0.9rem; color: var(--text-light); margin-bottom: 25px; font-family: var(--font-mono);">
+        Selecione o período e clique em "Gerar Relatório".</div>
+      <div class="stats-container" id="reportStatsContainer">
+        <div class="stat-card total">
+          <i class="fas fa-clipboard-check"></i>
+          <div class="stat-title">Total de Inspeções</div>
+          <div class="stat-value" id="statTotalValue">-</div>
+        </div>
+        <div class="stat-card approved">
+          <i class="fas fa-check-circle"></i>
+          <div class="stat-title">Aprovadas</div>
+          <div class="stat-value" id="statApprovedValue">-</div>
+        </div>
+        <div class="stat-card rejected">
+          <i class="fas fa-times-circle"></i>
+          <div class="stat-title">Reprovadas</div>
+          <div class="stat-value" id="statRejectedValue">-</div>
+        </div>
+        <div class="stat-card rate">
+          <i class="fas fa-percentage"></i>
+          <div class="stat-title">Taxa de Aprovação</div>
+          <div class="stat-value" id="statRateValue">-%</div>
+        </div>
+      </div>
+      <h2>Detalhes por Produto</h2>
+      <div id="resultsArea">
+        <div class="placeholder-message" id="resultsPlaceholder">Aguardando geração do relatório…</div>
+      </div>
+      <h2>Laudo Estatístico da OP</h2>
+      <div id="laudoArea">
+        <div class="placeholder-message">Informe uma OP e clique em "Gerar Laudo".</div>
+      </div>
+      <div class="histogram-container">
+        <div class="histogram-header">Histograma de ΔE por Cor</div>
+        <select id="colorSelect">
+          <option value="">Selecione uma cor (produto)...</option>
+        </select>
+        <button id="histogramBtn" onclick="generateHistogram()" disabled>Gerar Histograma</button>
+        <canvas id="histogramChart"></canvas>
+      </div>
+      <div class="report-chart-container" id="shiftComparisonSection">
+        <div class="report-chart-header">
+          <i class="fas fa-chart-bar"></i> Performance por Turno de Trabalho (Variabilidade ΔE)
+        </div>
+        <div id="shiftChart" style="width: 100%; height: 450px;"></div>
+      </div>
+    </div>
+
+    <div id="pantone-search-tab" class="tab-content">
+      <h1>Pesquisar Cores Pantone</h1>
+      <div class="input-group">
+        <label for="pantone-query">Nome ou Código Pantone:</label>
+        <input type="text" id="pantone-query" placeholder="Ex: 18-1662, Red, etc..."
+          onkeyup="if(event.key==='Enter') searchPantones()">
+      </div>
+      <button onclick="searchPantones()">Pesquisar</button>
+      <div class="results" id="pantone-results"></div>
+    </div>
+
+    <div id="profiles-history-tab" class="tab-content">
+      <h1>Consultar Perfis Históricos (Referência)</h1>
+      <div class="input-group">
+        <label for="hist_profile_select">Selecionar Perfil:</label>
+        <select id="hist_profile_select" onchange="showHistoricalProfile(this.value)"></select>
+      </div>
+      <div id="historical-profile-details" style="margin-top: 20px; display: none;">
+        <h2>Alvos do Perfil</h2>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Mínimo</th>
+                <th>Padrão</th>
+                <th>Máximo</th>
+              </tr>
+            </thead>
+            <tbody id="hist_profile_tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="process-register-tab" class="tab-content">
+      <div class="register-header">
+        <h1><i class="fas fa-layer-group"></i> CADASTRO CMYK</h1>
+        <div class="register-product-field">
+          <label for="reg_proc_product_code">Código do Produto (ID):</label>
+          <input type="text" id="reg_proc_product_code" placeholder="Ex: 0004" autocomplete="off">
+        </div>
+      </div>
+
+      <div id="process-register-form">
+        <div class="register-cards-container" id="reg_process_cards_wrapper">
+
+          <!-- Tabela oculta mantida apenas para retrocompatibilidade se houver algum seletor legado -->
+          <table id="reg_process_table" style="display:none;">
+            <tbody id="reg_process_tbody"></tbody>
+          </table>
+
+          <!-- Card Cyan -->
+          <div class="color-card-premium card-cyan" data-color="Cyan">
+            <div class="color-card-header">
+              <span><i class="fas fa-palette"></i> Cyan</span>
+            </div>
+            <div class="color-card-body">
+              <div class="input-row-group">
+                <span class="input-row-label"><i class="fas fa-tint"></i> Densitometria (Mín / Alvo / Máx)</span>
+                <div class="inputs-triple">
+                  <input type="number" step="0.01" class="dens-min" placeholder="Mín">
+                  <input type="number" step="0.01" class="dens-target" placeholder="Alvo">
+                  <input type="number" step="0.01" class="dens-max" placeholder="Máx">
+                </div>
+              </div>
+              <div class="input-row-group">
+                <span class="input-row-label"><i class="fas fa-chart-line"></i> TVA % (Mín / Alvo / Máx)</span>
+                <div class="inputs-triple">
+                  <input type="number" step="0.1" class="tva-min" placeholder="Mín" value="64">
+                  <input type="number" step="0.1" class="tva-target" placeholder="Alvo" value="69">
+                  <input type="number" step="0.1" class="tva-max" placeholder="Máx" value="74">
+                </div>
+              </div>
+              <div class="input-row-group">
+                <span class="input-row-label"><i class="fas fa-tools"></i> ANILOX (Número do anilox / Nº / Dupla
+                  Face)</span>
+                <div class="equip-inputs">
+                  <input type="text" class="anilox" placeholder="Número do anilox (ex: GTT)">
+                  <input type="text" class="anilox-num" placeholder="Nº Linhas / BCM">
+                  <input type="text" class="dupla-face" placeholder="Dupla Face">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card Magenta -->
+          <div class="color-card-premium card-magenta" data-color="Magenta">
+            <div class="color-card-header">
+              <span><i class="fas fa-palette"></i> Magenta</span>
+            </div>
+            <div class="color-card-body">
+              <div class="input-row-group">
+                <span class="input-row-label"><i class="fas fa-tint"></i> Densitometria</span>
+                <div class="inputs-triple">
+                  <input type="number" step="0.01" class="dens-min" placeholder="Mín">
+                  <input type="number" step="0.01" class="dens-target" placeholder="Alvo">
+                  <input type="number" step="0.01" class="dens-max" placeholder="Máx">
+                </div>
+              </div>
+              <div class="input-row-group">
+                <span class="input-row-label"><i class="fas fa-chart-line"></i> TVA %</span>
+                <div class="inputs-triple">
+                  <input type="number" step="0.1" class="tva-min" placeholder="Mín" value="64">
+                  <input type="number" step="0.1" class="tva-target" placeholder="Alvo" value="69">
+                  <input type="number" step="0.1" class="tva-max" placeholder="Máx" value="74">
+                </div>
+              </div>
+              <div class="input-row-group">
+                <span class="input-row-label"><i class="fas fa-tools"></i> ANILOX</span>
+                <div class="equip-inputs">
+                  <input type="text" class="anilox" placeholder="Número do anilox">
+                  <input type="text" class="anilox-num" placeholder="Nº Linhas / BCM">
+                  <input type="text" class="dupla-face" placeholder="Dupla Face">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card Yellow -->
+          <div class="color-card-premium card-yellow" data-color="Yellow">
+            <div class="color-card-header">
+              <span><i class="fas fa-palette"></i> Yellow</span>
+            </div>
+            <div class="color-card-body">
+              <div class="input-row-group">
+                <span class="input-row-label"><i class="fas fa-tint"></i> Densitometria</span>
+                <div class="inputs-triple">
+                  <input type="number" step="0.01" class="dens-min" placeholder="Mín">
+                  <input type="number" step="0.01" class="dens-target" placeholder="Alvo">
+                  <input type="number" step="0.01" class="dens-max" placeholder="Máx">
+                </div>
+              </div>
+              <div class="input-row-group">
+                <span class="input-row-label"><i class="fas fa-chart-line"></i> TVA %</span>
+                <div class="inputs-triple">
+                  <input type="number" step="0.1" class="tva-min" placeholder="Mín" value="64">
+                  <input type="number" step="0.1" class="tva-target" placeholder="Alvo" value="69">
+                  <input type="number" step="0.1" class="tva-max" placeholder="Máx" value="74">
+                </div>
+              </div>
+              <div class="input-row-group">
+                <span class="input-row-label"><i class="fas fa-tools"></i> ANILOX</span>
+                <div class="equip-inputs">
+                  <input type="text" class="anilox" placeholder="Número do anilox">
+                  <input type="text" class="anilox-num" placeholder="Nº Linhas / BCM">
+                  <input type="text" class="dupla-face" placeholder="Dupla Face">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card Black -->
+          <div class="color-card-premium card-black" data-color="Black">
+            <div class="color-card-header">
+              <span><i class="fas fa-palette"></i> Black</span>
+            </div>
+            <div class="color-card-body">
+              <div class="input-row-group">
+                <span class="input-row-label"><i class="fas fa-tint"></i> Densitometria</span>
+                <div class="inputs-triple">
+                  <input type="number" step="0.01" class="dens-min" placeholder="Mín">
+                  <input type="number" step="0.01" class="dens-target" placeholder="Alvo">
+                  <input type="number" step="0.01" class="dens-max" placeholder="Máx">
+                </div>
+              </div>
+              <div class="input-row-group">
+                <span class="input-row-label"><i class="fas fa-chart-line"></i> TVA %</span>
+                <div class="inputs-triple">
+                  <input type="number" step="0.1" class="tva-min" placeholder="Mín" value="64">
+                  <input type="number" step="0.1" class="tva-target" placeholder="Alvo" value="69">
+                  <input type="number" step="0.1" class="tva-max" placeholder="Máx" value="74">
+                </div>
+              </div>
+              <div class="input-row-group">
+                <span class="input-row-label"><i class="fas fa-tools"></i> ANILOX</span>
+                <div class="equip-inputs">
+                  <input type="text" class="anilox" placeholder="Número do anilox">
+                  <input type="text" class="anilox-num" placeholder="Nº Linhas / BCM">
+                  <input type="text" class="dupla-face" placeholder="Dupla Face">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card de Opacidade (Sempre no final) -->
+          <div class="opacity-card-premium">
+            <div class="opacity-title"><i class="fas fa-eye-slash"></i> Padrões de Opacidade do Branco</div>
+            <div class="input-row-group">
+              <span class="input-row-label">Opacidade (%) Mínimo / Alvo / Máximo</span>
+              <div class="inputs-triple">
+                <input type="number" step="0.1" id="reg_opac_min" placeholder="Mínimo">
+                <input type="number" step="0.1" id="reg_opac_target" placeholder="Alvo" value="52">
+                <input type="number" step="0.1" id="reg_opac_max" placeholder="Máximo">
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="register-footer-actions">
+          <button class="btn-add-special-premium" onclick="addSpecialColorRow()">
+            <i class="fas fa-plus-circle"></i> Adicionar Cor Especial
+          </button>
+
+          <button class="btn-save-premium" onclick="saveProcessStandards()">
+            <i class="fas fa-save"></i> SALVAR CADASTRO CMYK
+          </button>
+
+          <div id="processRegisterMessage" class="result-message"></div>
+        </div>
+      </div>
+
+      <div id="processStandardsList">
+        <div class="report-chart-header" style="margin-top: 40px; margin-bottom: 15px;">
+          <i class="fas fa-list-ul"></i> Padrões Cadastrados no Banco de Dados
+        </div>
+        <div class="table-container">
+          <table class="standards-list-table">
+            <thead>
+              <tr>
+                <th>Código do Produto</th>
+                <th>Status do Cadastro</th>
+                <th style="text-align: right;">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="processStandardsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  </div>
+
+  <!-- Chamada para o arquivo JavaScript principal -->
+  <script src="index.js" defer></script>
+
+</body>
+
+</html>
