@@ -463,12 +463,40 @@ function updateInspectionsTable(data, append = false) {
 // ADICIONADO: Função para carregar Pantones
 async function loadpantones() {
   if (pantonedb.length > 0) return;
+  let allPantones = [];
+  let offset = 0;
+  const batchSize = 1000;
+  let keepFetching = true;
+  let totalCount = null;
+
   try {
-    const { data, error } = await sb.from("pantone_standards").select("*");
-    if (error) throw error;
-    pantonedb = data || [];
+    while (keepFetching) {
+      const options = totalCount === null ? { count: 'exact' } : {};
+      const { data, error, count } = await sb.from("pantone_standards")
+        .select("*", options)
+        .order('name')
+        .range(offset, offset + batchSize - 1);
+
+      if (error) throw error;
+
+      if (totalCount === null && count !== null) totalCount = count;
+
+      if (data && data.length > 0) {
+        allPantones = allPantones.concat(data);
+        if (data.length < batchSize || (totalCount !== null && allPantones.length >= totalCount)) {
+          keepFetching = false;
+        } else {
+          offset += batchSize;
+        }
+      } else {
+        keepFetching = false;
+      }
+    }
+    pantonedb = allPantones;
+    console.log("Pantones carregados:", pantonedb.length);
   } catch (e) {
     console.error("Erro ao carregar Pantones:", e);
+    pantonedb = [];
   }
 }
 
