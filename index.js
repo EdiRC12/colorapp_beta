@@ -18,20 +18,48 @@ let shiftChartInstance = null; // Instância do gráfico de turnos
 let productDescriptions = {}; // Variável global para descrições
 
 async function fetchProductDescriptions() {
+  let allDescriptions = [];
+  let offset = 0;
+  const batchSize = 1000;
+  let keepFetching = true;
+
   try {
-    const response = await fetch('https://andregazineu.github.io/boom/description.json');
-    const data = await response.json();
-    // Transforma o array do JSON em um objeto: { "5627": "AUSTER NUMIA", ... }
-    productDescriptions = data.reduce((acc, item) => {
+    while (keepFetching) {
+      // Busca da nova tabela criada: product_descriptions
+      // Note que usamos "Description" com D maiúsculo para casar com o CSV importado
+      const { data, error } = await sb.from("product_descriptions")
+        .select("product, Description")
+        .range(offset, offset + batchSize - 1);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        allDescriptions = allDescriptions.concat(data);
+        if (data.length < batchSize) {
+          keepFetching = false;
+        } else {
+          offset += batchSize;
+        }
+      } else {
+        keepFetching = false;
+      }
+    }
+
+    // Transforma o array do banco em um objeto: { "5627": "AUSTER NUMIA", ... }
+    productDescriptions = allDescriptions.reduce((acc, item) => {
       if (item.product) {
+        // Limpa o código (remove hifens se houver) para garantir o match
         const code = item.product.toString().split('-')[0].trim();
-        acc[code] = item.Description;
+        acc[code] = item.Description || "-";
       }
       return acc;
     }, {});
-    console.log("Descrições carregadas:", Object.keys(productDescriptions).length);
+
+    console.log("Descrições carregadas do Supabase:", Object.keys(productDescriptions).length);
   } catch (e) {
-    console.error("Erro ao buscar descrições:", e);
+    console.error("Erro ao buscar descrições no Supabase:", e);
+    // Fallback para não quebrar o app
+    productDescriptions = {};
   }
 }
 
@@ -145,6 +173,9 @@ function showTab(tabId) {
     case 'profiles-history':
       populateProfileSelector();
       break;
+    case 'description-manager':
+      document.getElementById('descriptionManagerMessage').textContent = "";
+      break;
   }
 }
 
@@ -194,6 +225,104 @@ function searchproducts() {
     results.appendChild(matchdiv);
   });
 }
+
+// NOVO: Event listener para carregar descrição em tempo real no Gerenciador de Descrições
+document.getElementById('manager_product_code').addEventListener('input', (e) => {
+  const code = e.target.value.trim();
+  const descInput = document.getElementById('manager_description');
+  if (descInput) {
+    descInput.value = productDescriptions[code] || "";
+  }
+});
+
+// NOVO: Função para o botão de Pesquisar no Gerenciador de Descrições (Explícito)
+function searchOnlyDescriptionManager() {
+  const code = document.getElementById('manager_product_code').value.trim();
+  const descInput = document.getElementById('manager_description');
+  const msgEl = document.getElementById('descriptionManagerMessage');
+
+  if (!code) {
+    alert("Digite o código do produto!");
+    return;
+  }
+
+  const description = productDescriptions[code];
+  if (description) {
+    descInput.value = description;
+    msgEl.textContent = "Produto encontrado!";
+    msgEl.style.color = "var(--success)";
+  } else {
+    descInput.value = "";
+    msgEl.textContent = "Código não encontrado no banco local.";
+    msgEl.style.color = "var(--warning)";
+  }
+}
+
+// Listener simplificado para o Cadastro CMYK (apenas visual)
+document.getElementById('reg_proc_product_code').addEventListener('input', (e) => {
+  const code = e.target.value.trim();
+  const descDisplay = document.getElementById('cmyk_desc_display');
+  if (descDisplay) {
+    descDisplay.textContent = productDescriptions[code] || "";
+  }
+});
+
+// NOVO: Função para o botão de Pesquisar no Cadastro CMYK
+async function searchProcessStandardsTab() {
+  const code = document.getElementById('reg_proc_product_code').value.trim();
+  if (!code) {
+    alert("Digite um código para pesquisar.");
+    return;
+  }
+
+  const msgEl = document.getElementById("processRegisterMessage");
+  msgEl.textContent = "Pesquisando...";
+  msgEl.style.color = "var(--primary)";
+
+  // Verifica se existe no banco de padrões
+  if (processStandardsdb.some(p => p.product_code === code)) {
+    await editProcessProduct(code);
+    msgEl.textContent = "Padrões carregados com sucesso!";
+    msgEl.style.color = "var(--success)";
+  } else {
+    resetProcessRegisterTable(true);
+    msgEl.textContent = "Nenhum padrão existente encontrado para este código.";
+    msgEl.style.color = "var(--warning)";
+  }
+}
+
+// NOVO: Função para salvar descrição pela nova aba
+async function saveOnlyDescriptionManager() {
+  const code = document.getElementById("manager_product_code").value.trim();
+  const description = document.getElementById("manager_description").value.trim();
+  const msgEl = document.getElementById("descriptionManagerMessage");
+
+  if (!code) {
+    alert("Digite o código do produto!");
+    return;
+  }
+
+  try {
+    const { error } = await sb.from("product_descriptions").upsert({
+      product: code,
+      Description: description
+    });
+
+    if (error) throw error;
+
+    productDescriptions[code] = description || "-";
+    msgEl.textContent = "Sucesso! Descrição atualizada no Supabase.";
+    msgEl.style.color = "var(--success)";
+
+    updateproductstable();
+    loadInspections(0, false);
+  } catch (e) {
+    console.error("Erro ao salvar descrição:", e);
+    msgEl.textContent = "Erro ao salvar: " + e.message;
+    msgEl.style.color = "var(--danger)";
+  }
+}
+
 function updatesamplecolor() {
   const l2 = parseFloat(document.getElementById("labl").value) || 0;
   const a2 = parseFloat(document.getElementById("laba").value) || 0;
@@ -285,7 +414,7 @@ async function loadInspections(offset, append) {
     // A estratégia aqui será: se isSearchActive for false, carrega paginado normal.
     // Se isSearchActive for true, 'searchdatabase' cuida de tudo?
     // Vamos permitir que 'loadMore' funcione também para busca sem filtros complexos por enquanto,
-    // ou desativar loadMore se for busca complexa (mas o usuario quer ver historico).
+    // ou desativar loadMore se for busca complexa (but o usuario quer ver historico).
 
     // CORREÇÃO: Vamos fazer loadInspections lidar apenas com a carga "Default" (todo o historico).
     // Quando for pesquisa (searchdatabase), ela lida com a pesquisa.
@@ -684,7 +813,7 @@ async function removeproduct(id) {
   }
 }
 function searchproductsdb() {
-  const searchTerm = document.getElementById("productsearch").value.toLowerCase().trim();
+  const searchTerm = document.getElementById("productsearch").value.trim();
   const filteredProducts = !searchTerm ? productsdb : productsdb.filter(p => p.name.toLowerCase().includes(searchTerm));
   const tablebody = document.getElementById("productsbody");
   tablebody.innerHTML = "";
@@ -1400,8 +1529,7 @@ async function fetchAndDisplayProcessInspections() {
 
     // Filtro de Termo (Produto ou OP)
     // Nota: Como o Supabase não suporta OR complexo facilmente com query builder em colunas diferentes sem rpc ou filtros manuais no JS
-    // vamos filtrar o produto/op no JS se houver termo, ou tentar um filter simples se for só um campo.
-    // Para manter simples e funcional, buscaremos os dados e filtraremos no client se o volume for razoável,
+    // vamos filtrar o produto/op no JS se o volume for razoável,
     // ou usaremos a sintaxe de filtro or se disponível.
 
     if (searchTerm) {
@@ -1541,7 +1669,6 @@ function groupAndStats(inspections) {
     if (!isNaN(d)) {
       total++;
       if (d <= DELTAE_APPROVED_THRESHOLD) approved++;
-      else rejected++;
     } else {
       total++;
       rejected++;
@@ -2036,8 +2163,15 @@ window.onload = async function () {
   updateDiagnosticPreviews();
   runColorDiagnostic();
 
-  await loadproducts();
+  // Consolidação do carregamento de dados
+  console.log("Iniciando carregamento de dados...");
   await fetchProductDescriptions();
+  await loadproducts();
+  await loadProcessStandardsDb();
+  await loadInitialInspections();
+  await loadpantones();
+  console.log("Dados carregados com sucesso.");
+
   showTab("search");
 };
 
@@ -2148,9 +2282,16 @@ function addSpecialColorRow() {
   wrapper.insertBefore(card, opacityCard);
 }
 
-function resetProcessRegisterTable() {
+function resetProcessRegisterTable(keepHeader = false) {
   const wrapper = document.getElementById('reg_process_cards_wrapper');
   if (!wrapper) return;
+
+  if (!keepHeader) {
+    // Limpa também os campos de cabeçalho
+    document.getElementById("reg_proc_product_code").value = "";
+    const descDisplay = document.getElementById("cmyk_desc_display");
+    if (descDisplay) descDisplay.textContent = "";
+  }
 
   wrapper.innerHTML = `
     <table id="reg_process_table" style="display:none;"><tbody id="reg_process_tbody"></tbody></table>
@@ -2392,9 +2533,15 @@ async function editProcessProduct(productCode) {
       return;
     }
 
-    // 1. Resetar o formulário
-    resetProcessRegisterTable();
+    // 2. Resetar o formulário mantendo o cabeçalho
+    resetProcessRegisterTable(true);
     document.getElementById("reg_proc_product_code").value = productCode;
+
+    // NOVO: Preencher exibição de descrição (apenas texto)
+    const descDisplay = document.getElementById("cmyk_desc_display");
+    if (descDisplay) {
+      descDisplay.textContent = productDescriptions[productCode] || "";
+    }
 
     const wrapper = document.getElementById('reg_process_cards_wrapper');
 
