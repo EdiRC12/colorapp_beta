@@ -98,6 +98,134 @@
       border: 1px solid #b2ebf2;
     }
 
+    /* Estilos para o Laudo Unificado */
+    .laudo-report {
+      background: white;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      margin-top: 20px;
+      border-top: 5px solid var(--primary);
+      font-family: 'Poppins', sans-serif;
+    }
+
+    .laudo-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #f0f0f0;
+    }
+
+    .laudo-section {
+      margin-bottom: 35px;
+    }
+
+    .laudo-section h4 {
+      color: var(--primary-dark);
+      border-left: 4px solid var(--primary);
+      padding-left: 12px;
+      margin-bottom: 20px;
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 1rem;
+    }
+
+    .laudo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .laudo-card {
+      background: #fdfdfd;
+      border: 1px solid #eee;
+      padding: 18px;
+      border-radius: 10px;
+      position: relative;
+    }
+
+    .laudo-stats-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .laudo-stats-list li {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px dashed #eee;
+      font-size: 0.9rem;
+    }
+
+    .laudo-stats-list li:last-child {
+      border-bottom: none;
+    }
+
+    .laudo-badge {
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .badge-success {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .badge-danger {
+      background: #f8d7da;
+      color: #721c24;
+    }
+
+    .badge-warning {
+      background: #fff3cd;
+      color: #856404;
+    }
+
+    .laudo-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 0.85rem;
+    }
+
+    .laudo-table th {
+      background: #f8fafc;
+      text-align: left;
+      padding: 10px;
+      color: #64748b;
+      font-weight: 600;
+      border-bottom: 2px solid #e2e8f0;
+    }
+
+    .laudo-table td {
+      padding: 10px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .compliance-summary {
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+      margin-top: 20px;
+      padding: 15px;
+      background: #f8fafc;
+      border-radius: 8px;
+    }
+
+    .compliance-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
     .tag-pantone {
       background: #fff3e0;
       color: #e65100;
