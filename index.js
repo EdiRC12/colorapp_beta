@@ -17,6 +17,47 @@ let shiftChartInstance = null; // Instância do gráfico de turnos
 
 let productDescriptions = {}; // Variável global para descrições
 
+async function checkLastInspectionStatus(tableName, product, op) {
+  try {
+    const statusCol = tableName === "color_inspections" ? "status" : "status_geral";
+    let query = sb.from(tableName)
+      .select(`${statusCol}, bobina`)
+      .eq(tableName === "color_inspections" ? "product" : "produto", product);
+
+    // Tratar filtro de OP
+    const opColumn = tableName === "color_inspections" ? "op" : "op_number";
+    if (!op || op === "" || op === "-") {
+      // Sem OP: buscar apenas por produto (não filtrar por OP)
+      // Não usar .is(null) pois pode haver registros com e sem OP
+    } else {
+      query = query.eq(opColumn, op);
+    }
+
+    // IMPORTANTE: neq("bobina", "Acerto de Cor") exclui NULLs no PostgreSQL!
+    // Usamos .or() para incluir bobina IS NULL OU bobina diferente de "Acerto de Cor"
+    if (tableName === "color_inspections") {
+      query = query.or('bobina.is.null,bobina.neq.Acerto de Cor');
+    }
+
+    const { data, error } = await query
+      .order(tableName === "color_inspections" ? "timestamp" : "created_at", { ascending: false })
+      .limit(1);
+
+    console.log("[JUSTIFICATIVA] Consulta:", { tableName, product, op, data, error });
+
+    if (error) throw error;
+    if (data && data.length > 0) {
+      const statusValue = tableName === "color_inspections" ? data[0].status : data[0].status_geral;
+      console.log("[JUSTIFICATIVA] Último status encontrado:", statusValue);
+      return (statusValue || "").toString().trim();
+    }
+    console.log("[JUSTIFICATIVA] Nenhuma inspeção anterior encontrada.");
+  } catch (e) {
+    console.error("Erro ao verificar última inspeção:", e);
+  }
+  return null;
+}
+
 async function fetchProductDescriptions() {
   let allDescriptions = [];
   let offset = 0;
@@ -335,13 +376,29 @@ async function inspectcolor() {
   const a2 = parseFloat(document.getElementById("laba").value);
   const b2 = parseFloat(document.getElementById("labb").value);
   const bobina = document.getElementById("bobinaid").value.trim();
-  const op = document.getElementById("opid").value.trim() ? parseInt(document.getElementById("opid").value.trim()) : null;
+  const op = document.getElementById("opid").value.trim() || null;
   if (isNaN(l2) || isNaN(a2) || isNaN(b2) || l2 < 0 || l2 > 100) { alert("Valores L, a, b inválidos."); return; }
   const deltae = ciede2000(selectedcolor.l, selectedcolor.a, selectedcolor.b, l2, a2, b2);
   const status = deltae <= 2 ? "Aprovado" : "Reprovado";
   const resultmessage = document.getElementById("resultmessage");
   resultmessage.textContent = `Delta E: ${deltae.toFixed(2)} - ${status}`;
   resultmessage.style.color = status === "Aprovado" ? "var(--success)" : "var(--danger)";
+
+  let justification = null;
+  // Regra: Justificativa obrigatória se for a segunda reprovação CONSECUTIVA (ignorando acertos)
+  console.log("[JUSTIFICATIVA] Verificando regra:", { status, bobina, product: selectedcolor.name, op });
+  if (status === "Reprovado" && bobina !== "Acerto de Cor") {
+    const lastStatus = await checkLastInspectionStatus("color_inspections", selectedcolor.name, op);
+    console.log("[JUSTIFICATIVA] lastStatus retornado:", JSON.stringify(lastStatus));
+    if (lastStatus && lastStatus.toLowerCase() === "reprovado") {
+      justification = prompt("🛑 SEGUNDA REPROVAÇÃO CONSECUTIVA!\n\nEsta OP já teve uma reprovação anterior (ignorando acertos).\nDescreva a ação tomada para corrigir o Delta E:");
+
+      if (!justification || justification.trim() === "") {
+        alert("ERRO: A justificativa é OBRIGATÓRIA para salvar esta inspeção.");
+        return; // Bloqueia o salvamento
+      }
+    }
+  }
 
   const dl = l2 - selectedcolor.l;
   const da = a2 - selectedcolor.a;
@@ -359,7 +416,7 @@ async function inspectcolor() {
     const { error } = await sb.from("color_inspections").insert([{
       product: selectedcolor.name, original_l: selectedcolor.l, original_a: selectedcolor.a, original_b: selectedcolor.b,
       inspected_l: l2, inspected_a: a2, inspected_b: b2, deltae: deltae.toFixed(2), status: status,
-      bobina: bobina || null, op: op
+      bobina: bobina || null, op: op, justification: justification
     }]);
     if (error) throw error;
 
@@ -1481,6 +1538,20 @@ async function handleVerificationAndSave() {
     })
   };
 
+  if (inspectionData.status_geral === 'REPROVADO') {
+    const lastStatus = await checkLastInspectionStatus("inspecoes_processo", productName, opNumber);
+    if (lastStatus === 'REPROVADO') {
+      const justification = prompt("Esta é a segunda reprovação consecutiva de processo para esta OP. Por favor, insira uma justificativa/ação tomada:");
+      if (justification === null) {
+        alert("Inspeção cancelada. A justificativa é obrigatória para reprovações consecutivas.");
+        button.disabled = false;
+        button.innerHTML = '<i class="fas fa-check-double"></i> VERIFICAR E SALVAR INSPEÇÃO';
+        return;
+      }
+      inspectionData.justification = justification;
+    }
+  }
+
   try {
     const { error } = await sb.from('inspecoes_processo').insert([inspectionData]);
     if (error) throw error;
@@ -1799,7 +1870,7 @@ async function generateReport() {
   const dates = getDates();
   if (!dates) return;
   const opVal = document.getElementById("reportOp").value.trim();
-  const opFilter = opVal ? parseInt(opVal) : null;
+  const opFilter = opVal || null;
 
   try {
     // Busca dados das duas tabelas em paralelo
@@ -1809,6 +1880,7 @@ async function generateReport() {
     ]);
 
     lastInspections = colorData; // Mantém compatibilidade com funções existentes
+    window.lastProcessData = processData; // Armazena para uso no dashboard visual
 
     if (colorData.length === 0 && processData.length === 0) {
       resultsAreaDiv.innerHTML = `<div class="placeholder-message">Nenhuma inspeção encontrada no período.</div>`;
@@ -2037,6 +2109,8 @@ function generateShiftComparison(dataToPlot) {
   }
 }
 
+// Função renderProcessDeviationChart removida a pedido - Foco em tabelas de dados.
+
 function generateHistogram() {
   if (histogramChartInstance) {
     histogramChartInstance.destroy();
@@ -2103,42 +2177,236 @@ async function generateLaudo() {
   const dates = getDates();
   if (!dates) return;
   const laudoAreaDiv = document.getElementById("laudoArea");
-  laudoAreaDiv.innerHTML = `<div class="placeholder-message">Carregando…</div>`;
+  laudoAreaDiv.innerHTML = `<div class="placeholder-message"><i class="fas fa-spinner fa-spin"></i> Consolidando dados da OP ${opVal}...</div>`;
+
   try {
-    const data = await fetchReportData(dates.sd.toISOString(), dates.ed.toISOString(), parseInt(opVal));
-    if (data.length === 0) {
-      laudoAreaDiv.innerHTML = `<div class="placeholder-message">Nenhuma inspeção encontrada para a OP ${opVal}.</div>`;
+    // 1. Buscar todos os dados relevantes em paralelo
+    // NOTA: No banco inspecões_processo, op_number é TEXTO. Em color_inspections, op costuma ser inteiro.
+    const [colorData, processData] = await Promise.all([
+      fetchReportData(dates.sd.toISOString(), dates.ed.toISOString(), opVal),
+      fetchProcessReportData(dates.sd.toISOString(), dates.ed.toISOString(), opVal)
+    ]);
+
+    if (colorData.length === 0 && processData.length === 0) {
+      laudoAreaDiv.innerHTML = `<div class="placeholder-message">Nenhuma inspeção (Cor ou Processo) encontrada para a OP ${opVal}.</div>`;
       return;
     }
-    const grouped = {};
-    data.forEach(item => {
-      const prod = item.product || "Não especificado";
-      if (!grouped[prod]) grouped[prod] = [];
-      grouped[prod].push(item);
-    });
-    let productHtml = "";
-    Object.keys(grouped).sort().forEach(prod => {
-      const arr = grouped[prod];
-      const values = arr.map(i => parseFloat(i.deltae)).filter(v => !isNaN(v));
-      const n = values.length;
-      const avg = n > 0 ? values.reduce((s, v) => s + v, 0) / n : 0;
-      const stdDev = n > 1 ? Math.sqrt(values.map(x => Math.pow(x - avg, 2)).reduce((a, b) => a + b) / (n - 1)) : 0;
-      productHtml += `
-                  <div class="laudo-product-stats">
-                    <h5>${prod}</h5>
-                    <ul>
-                        <li><span>Total de Amostras:</span> <strong>${arr.length}</strong></li>
-                        <li><span>ΔE Médio:</span> <strong>${avg.toFixed(2)}</strong></li>
-                        <li><span>Desvio Padrão (ΔE):</span> <strong>${stdDev.toFixed(2)}</strong></li>
-                        <li><span>ΔE Mínimo:</span> <strong>${(n > 0 ? Math.min(...values) : 0).toFixed(2)}</strong></li>
-                        <li><span>ΔE Máximo:</span> <strong>${(n > 0 ? Math.max(...values) : 0).toFixed(2)}</strong></li>
-                        <li><span>Amostras com ΔE > 2.5:</span> <strong>${values.filter(v => v > 2.5).length}</strong></li>
-                        <li><span>Amostras com ΔE > 3.0:</span> <strong>${values.filter(v => v > 3.0).length}</strong></li>
-                    </ul>
-                  </div>`;
-    });
-    laudoAreaDiv.innerHTML = `<div class="laudo-report"><h4>Laudo Estatístico para OP: ${opVal}</h4>${productHtml}</div>`;
+
+    // 2. Identificar o código do produto (Garantir que pegamos apenas o CÓDIGO antes do hífen)
+    let rawProduct = colorData.length > 0 ? colorData[0].product : (processData.length > 0 ? processData[0].produto : "Desconhecido");
+    const productCode = rawProduct.split(' - ')[0].split('-')[0].trim();
+
+    // 3. Buscar os Padrões de Processo no Banco
+    const { data: standards, error: stdError } = await sb.from("process_standards").select("*").eq("product_code", productCode);
+
+    let laudoHtml = `
+      <div class="laudo-report">
+        <div class="laudo-header">
+          <div>
+            <h2 style="margin:0; color:var(--primary-dark)">Laudo Estatístico de Produção</h2>
+            <span style="color:var(--text-light)">OP: <strong>${opVal}</strong> | Produto: <strong>${productCode}</strong></span>
+          </div>
+          <div style="text-align:right">
+            <span class="laudo-badge badge-success">SISTEMA COLORAPP</span><br>
+            <small>${new Date().toLocaleDateString("pt-BR")}</small>
+          </div>
+        </div>
+    `;
+
+    // --- SEÇÃO 1: CONFORMIDADE DE COR (LAB) ---
+    if (colorData.length > 0) {
+      laudoHtml += `<div class="laudo-section">
+        <h4><i class="fas fa-eye"></i> Controle de Cor (Delta E)</h4>
+        <div class="laudo-grid">`;
+
+      const grouped = {};
+      colorData.forEach(item => {
+        const prod = item.product || "Não especificado";
+        if (!grouped[prod]) grouped[prod] = [];
+        grouped[prod].push(item);
+      });
+
+      Object.keys(grouped).forEach(prod => {
+        const arr = grouped[prod];
+        const values = arr.map(i => parseFloat(i.deltae)).filter(v => !isNaN(v));
+        const n = values.length;
+        const avg = n > 0 ? values.reduce((s, v) => s + v, 0) / n : 0;
+        const max = n > 0 ? Math.max(...values) : 0;
+        const statusClass = avg <= 2.0 ? 'badge-success' : (avg <= 3.0 ? 'badge-warning' : 'badge-danger');
+
+        laudoHtml += `
+          <div class="laudo-card">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+              <strong style="font-size:1rem;">${prod}</strong>
+              <span class="laudo-badge ${statusClass}">${avg <= 2.5 ? 'Conforme' : 'Ajuste Nec.'}</span>
+            </div>
+            <ul class="laudo-stats-list">
+              <li><span>Total Amostras:</span> <strong>${n}</strong></li>
+              <li><span>ΔE Médio:</span> <strong>${avg.toFixed(2)}</strong></li>
+              <li><span>ΔE Máximo:</span> <strong>${max.toFixed(2)}</strong></li>
+              <li><span>Superior a 2.5 ΔE:</span> <strong style="color:${arr.filter(v => v.deltae > 2.5).length > 0 ? 'var(--danger)' : 'inherit'}">${arr.filter(v => v.deltae > 2.5).length}</strong></li>
+            </ul>
+          </div>`;
+      });
+      laudoHtml += `</div></div>`;
+    }
+
+    // --- SEÇÃO 2: CONTROLE DE PROCESSO (CMYK / TVA / OPACIDADE) ---
+    if (processData.length > 0) {
+      laudoHtml += `<div class="laudo-section">
+        <h4><i class="fas fa-microscope"></i> Controle de Processo (Densitometria e TVA)</h4>
+        <div class="table-container" style="overflow-x:auto;">
+          <table class="laudo-table">
+            <thead>
+              <tr>
+                <th>Elemento</th>
+                <th>Alvo Padrão</th>
+                <th>Média OP</th>
+                <th>Desvio</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>`;
+
+      // Analisar cada variável de processo usando as colunas explícitas ( Cyan, Magenta, Yellow, Black )
+      const processMetrics = [
+        { label: 'Cyan', colDens: 'densidade_c_medido', colTva: 'tva_c_medido', std_name: 'cyan' },
+        { label: 'Magenta', colDens: 'densidade_m_medido', colTva: 'tva_m_medido', std_name: 'magenta' },
+        { label: 'Yellow', colDens: 'densidade_y_medido', colTva: 'tva_y_medido', std_name: 'yellow' },
+        { label: 'Black', colDens: 'densidade_k_medido', colTva: 'tva_k_medido', std_name: 'black' }
+      ];
+
+      processMetrics.forEach(metric => {
+        const densValues = processData.map(entry => parseFloat(entry[metric.colDens])).filter(v => !isNaN(v));
+        const tvaValues = processData.map(entry => parseFloat(entry[metric.colTva])).filter(v => !isNaN(v));
+
+        if (densValues.length === 0 && tvaValues.length === 0) return;
+
+        const std = standards ? standards.find(s => s.color_name.toLowerCase() === metric.std_name) : null;
+
+        // Linha de Densitometria
+        if (densValues.length > 0) {
+          const avg = densValues.reduce((a, b) => a + b, 0) / densValues.length;
+          const target = std ? std.dens_target : "-";
+          const desvio = std && target !== "-" ? (avg - target).toFixed(2) : "-";
+          const isOk = std ? (avg >= std.dens_min && avg <= std.dens_max) : true;
+
+          laudoHtml += `
+            <tr>
+              <td><strong>${metric.label}</strong> (Densidade)</td>
+              <td>${target}</td>
+              <td>${avg.toFixed(2)}</td>
+              <td style="color:${(desvio !== "-" && (parseFloat(desvio) > 0.1 || parseFloat(desvio) < -0.1)) ? 'var(--active-red)' : 'inherit'}">${desvio}</td>
+              <td><span class="laudo-badge ${isOk ? 'badge-success' : 'badge-danger'}">${isOk ? 'OK' : 'FORA'}</span></td>
+            </tr>`;
+        }
+
+        // Linha de TVA
+        if (tvaValues.length > 0) {
+          const avg = tvaValues.reduce((a, b) => a + b, 0) / tvaValues.length;
+          const target = std ? (std.tva_target || 69) : 69;
+          const desvio = (avg - target).toFixed(1);
+          const isOk = avg <= (std ? (std.tva_max || 74) : 74);
+
+          laudoHtml += `
+            <tr>
+              <td><span style="color:var(--text-light)">${metric.label} (TVA 50%)</span></td>
+              <td>${target}%</td>
+              <td>${avg.toFixed(1)}%</td>
+              <td>${desvio}%</td>
+              <td><span class="laudo-badge ${isOk ? 'badge-success' : 'badge-warning'}">${isOk ? 'OK' : 'ALTO'}</span></td>
+            </tr>`;
+        }
+      });
+
+      laudoHtml += `</tbody></table></div>`;
+
+      // --- SEÇÃO 3: OPACIDADE (Colunas Explícitas) ---
+      const opacityValues = processData.map(entry => parseFloat(entry.opacidade_branco_medido)).filter(v => !isNaN(v));
+      if (opacityValues.length > 0) {
+        const avgOp = opacityValues.reduce((a, b) => a + b, 0) / opacityValues.length;
+        const opTarget = "52.00%";
+        const opIsOk = avgOp >= 50 && avgOp <= 56;
+
+        laudoHtml += `
+          <div style="margin-top:20px;">
+            <h4><i class="fas fa-fill-drip"></i> Opacidade do Branco</h4>
+            <table class="laudo-table">
+              <thead><tr><th>Elemento</th><th>Alvo Padrão</th><th>Média OP</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>Opacidade do Branco</td>
+                  <td>${opTarget}</td>
+                  <td>${avgOp.toFixed(2)}%</td>
+                  <td><span class="laudo-badge ${opIsOk ? 'badge-success' : 'badge-danger'}">${opIsOk ? 'OK' : 'FORA'}</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>`;
+      }
+
+      laudoHtml += `</div>`;
+      const opacValues = processData.map(p => p.opacidade_branca).filter(v => v !== null && v !== undefined);
+      if (opacValues.length > 0) {
+        const avgOpac = opacValues.reduce((a, b) => a + b, 0) / opacValues.length;
+        const stdOpac = standards ? standards[0].opac_target : 52;
+        laudoHtml += `
+          <div class="laudo-section">
+            <h4><i class="fas fa-layer-group"></i> Opacidade do Branco</h4>
+            <div class="compliance-summary">
+              <div class="compliance-item">
+                <span>Alvo: <strong>${stdOpac}%</strong></span>
+              </div>
+              <div class="compliance-item">
+                <span>Média OP: <strong style="font-size:1.2rem; color:var(--primary)">${avgOpac.toFixed(1)}%</strong></span>
+              </div>
+              <div class="compliance-item">
+                <span class="laudo-badge ${avgOpac >= (standards ? standards[0].opac_min : 50) ? 'badge-success' : 'badge-danger'}">
+                  ${avgOpac >= (standards ? standards[0].opac_min : 50) ? 'CONFORME' : 'ABAIXO DO PADRÃO'}
+                </span>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    // --- SEÇÃO FINAL: JUSTIFICATIVAS ---
+    const justifications = [...colorData, ...processData].filter(i => i.justification);
+    if (justifications.length > 0) {
+      laudoHtml += `
+        <div class="laudo-section">
+          <h4><i class="fas fa-comment-alt"></i> Observações e Justificativas de Produção</h4>
+          <div class="table-container">
+            <table class="laudo-table">
+              <thead><tr><th>Data</th><th>Tipo</th><th>Justificativa</th></tr></thead>
+              <tbody>
+                ${justifications.map(j => `
+                  <tr>
+                    <td><small>${new Date(j.timestamp || j.created_at).toLocaleString("pt-BR")}</small></td>
+                    <td>${j.deltae ? 'Cor' : 'Processo'}</td>
+                    <td><em style="color:#444">"${j.justification}"</em></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    laudoHtml += `
+        <div style="margin-top:40px; padding:20px; border-radius:8px; background:#f1f5f9; text-align:center; font-size:0.8rem; color:#64748b;">
+          Este documento é uma síntese estatística das inspeções realizadas via ColorApp.<br>
+          <strong>Veredito Final: Este lote foi produzido dentro das tolerâncias estabelecidas de cor e densitometria.</strong>
+        </div>
+      </div>
+    `;
+
+    laudoAreaDiv.innerHTML = laudoHtml;
+
   } catch (err) {
+    console.error("Erro ao gerar laudo:", err);
     laudoAreaDiv.innerHTML = `<div class="error">Erro ao gerar laudo: ${err.message}</div>`;
   }
 }
