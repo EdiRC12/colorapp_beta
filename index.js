@@ -17,6 +17,57 @@ let shiftChartInstance = null; // Instância do gráfico de turnos
 
 let productDescriptions = {}; // Variável global para descrições
 
+/**
+ * Função para exibir um modal customizado, não cancelável, que força o preenchimento de justificativa.
+ * Retorna uma Promise que só resolve quando o usuário fornece uma justificativa válida (>= 5 chars).
+ */
+function showRequiredJustificationModal(title, msg) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('justificationModal');
+    const input = document.getElementById('modalInput');
+    const btn = document.getElementById('modalSubmitBtn');
+    const titleEl = document.getElementById('modalTitle');
+    const msgEl = document.getElementById('modalMessage');
+
+    // Configura texto do modal
+    titleEl.innerHTML = title ? `<i class="fas fa-exclamation-triangle"></i> ${title}` : '<i class="fas fa-exclamation-triangle"></i> REPROVAÇÃO CONSECUTIVA!';
+    msgEl.textContent = msg || 'Esta OP já teve uma reprovação anterior. Por favor, descreva detalhadamente a ação corretiva tomada.';
+    
+    // Resetar estado inicial
+    input.value = '';
+    btn.disabled = true;
+    btn.style.cursor = 'not-allowed';
+    btn.style.opacity = '0.5';
+    input.style.borderColor = "#dee2e6";
+    modal.style.display = 'flex';
+
+    // Focar no campo de texto
+    setTimeout(() => input.focus(), 100);
+
+    // Validação em tempo real
+    input.oninput = () => {
+      const val = input.value.trim();
+      if (val.length >= 5) {
+        btn.disabled = false;
+        btn.style.cursor = 'pointer';
+        btn.style.opacity = '1';
+        input.style.borderColor = '#28a745';
+      } else {
+        btn.disabled = true;
+        btn.style.cursor = 'not-allowed';
+        btn.style.opacity = '0.5';
+        input.style.borderColor = '#dee2e6';
+      }
+    };
+
+    // Resposta ao clique
+    btn.onclick = () => {
+      modal.style.display = 'none';
+      resolve(input.value.trim());
+    };
+  });
+}
+
 async function checkLastInspectionStatus(tableName, product, op) {
   try {
     const statusCol = tableName === "color_inspections" ? "status" : "status_geral";
@@ -385,18 +436,15 @@ async function inspectcolor() {
   resultmessage.style.color = status === "Aprovado" ? "var(--success)" : "var(--danger)";
 
   let justification = null;
-  // Regra: Justificativa obrigatória se for a segunda reprovação CONSECUTIVA (ignorando acertos)
-  console.log("[JUSTIFICATIVA] Verificando regra:", { status, bobina, product: selectedcolor.name, op });
   if (status === "Reprovado" && bobina !== "Acerto de Cor") {
     const lastStatus = await checkLastInspectionStatus("color_inspections", selectedcolor.name, op);
-    console.log("[JUSTIFICATIVA] lastStatus retornado:", JSON.stringify(lastStatus));
-    if (lastStatus && lastStatus.toLowerCase() === "reprovado") {
-      justification = prompt("🛑 SEGUNDA REPROVAÇÃO CONSECUTIVA!\n\nEsta OP já teve uma reprovação anterior (ignorando acertos).\nDescreva a ação tomada para corrigir o Delta E:");
 
-      if (!justification || justification.trim() === "") {
-        alert("ERRO: A justificativa é OBRIGATÓRIA para salvar esta inspeção.");
-        return; // Bloqueia o salvamento
-      }
+    if (lastStatus && lastStatus.toLowerCase() === "reprovado") {
+      // MODAL OBRIGATÓRIO (Substitui prompt cancelável)
+      justification = await showRequiredJustificationModal(
+        "🚨 SEGUNDA REPROVAÇÃO CONSECUTIVA!",
+        "Esta OP já teve uma reprovação anterior (ignorando acertos). Informe detalhadamente o que foi feito para corrigir o DELTA E:"
+      );
     }
   }
 
@@ -1540,15 +1588,13 @@ async function handleVerificationAndSave() {
 
   if (inspectionData.status_geral === 'REPROVADO') {
     const lastStatus = await checkLastInspectionStatus("inspecoes_processo", productName, opNumber);
+
     if (lastStatus === 'REPROVADO') {
-      const justification = prompt("Esta é a segunda reprovação consecutiva de processo para esta OP. Por favor, insira uma justificativa/ação tomada:");
-      if (justification === null) {
-        alert("Inspeção cancelada. A justificativa é obrigatória para reprovações consecutivas.");
-        button.disabled = false;
-        button.innerHTML = '<i class="fas fa-check-double"></i> VERIFICAR E SALVAR INSPEÇÃO';
-        return;
-      }
-      inspectionData.justification = justification;
+      // MODAL OBRIGATÓRIO DE PROCESSO
+      inspectionData.justification = await showRequiredJustificationModal(
+        "🚨 SEGUNDA REPROVAÇÃO DE PROCESSO!",
+        "Esta OP já teve uma reprovação de processo anterior. Descreva a ação tomada para corrigir os valores de Densidade/TVA:"
+      );
     }
   }
 
