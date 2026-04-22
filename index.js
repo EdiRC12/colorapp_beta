@@ -1752,7 +1752,7 @@ function getDates() {
   return { sd, ed };
 }
 async function fetchReportData(sdISO, edISO, opFilter) {
-  let query = sb.from("color_inspections").select("product, deltae, bobina, op, timestamp, original_l, original_a, original_b, inspected_l, inspected_a, inspected_b").gte("timestamp", sdISO).lte("timestamp", edISO);
+  let query = sb.from("color_inspections").select("product, deltae, bobina, op, timestamp, original_l, original_a, original_b, inspected_l, inspected_a, inspected_b, justification").gte("timestamp", sdISO).lte("timestamp", edISO);
   if (opFilter !== null) query = query.eq("op", opFilter);
   query = query.order("product").order("timestamp", { ascending: true });
   const { data, error } = await query;
@@ -1783,11 +1783,15 @@ function groupAndStats(inspections) {
     if (!grouped[prod]) grouped[prod] = [];
     grouped[prod].push(item);
     const d = parseFloat(item.deltae);
+    
+    total++;
     if (!isNaN(d)) {
-      total++;
-      if (d <= DELTAE_APPROVED_THRESHOLD) approved++;
+      if (d <= DELTAE_APPROVED_THRESHOLD) {
+        approved++;
+      } else {
+        rejected++;
+      }
     } else {
-      total++;
       rejected++;
     }
   });
@@ -2195,7 +2199,7 @@ function generateHistogram() {
 }
 function downloadExcel() {
   if (!lastInspections.length) return;
-  const rows = [["Produto", "Bobina", "OP", "L Orig.", "a Orig.", "b Orig.", "L Insp.", "a Insp.", "b Insp.", "ΔE", "Data/Hora"]];
+  const rows = [["Produto", "Bobina", "OP", "L Orig.", "a Orig.", "b Orig.", "L Insp.", "a Insp.", "b Insp.", "ΔE", "Data/Hora", "Justificativa"]];
   // MODIFICAÇÃO: Correção do fuso horário para Brasília no Excel
   lastInspections.forEach(item => rows.push([
     item.product || "-",
@@ -2208,7 +2212,8 @@ function downloadExcel() {
     item.inspected_a ?? "-",
     item.inspected_b ?? "-",
     item.deltae,
-    item.timestamp ? new Date(item.timestamp).toLocaleString("pt-BR", { timeZone: 'America/Sao_Paulo' }) : "-"
+    item.timestamp ? new Date(item.timestamp).toLocaleString("pt-BR", { timeZone: 'America/Sao_Paulo' }) : "-",
+    item.justification || "-"
   ]));
   const ws = window.XLSX.utils.aoa_to_sheet(rows);
   const wb = window.XLSX.utils.book_new();
