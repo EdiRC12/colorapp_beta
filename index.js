@@ -16,6 +16,7 @@ const DIAGNOSTIC_TOLERANCE = 0.5;
 let shiftChartInstance = null; // Instância do gráfico de turnos
 
 let productDescriptions = {}; // Variável global para descrições
+let coloristasDb = {}; // Variável global para coloristas { matricula: { nome, turno } }
 
 /**
  * Função para exibir um modal customizado, não cancelável, que força o preenchimento de justificativa.
@@ -155,6 +156,37 @@ async function fetchProductDescriptions() {
   }
 }
 
+async function fetchColoristas() {
+  try {
+    const { data, error } = await sb.from('coloristas').select('*');
+    if (error) throw error;
+    coloristasDb = {};
+    (data || []).forEach(item => {
+      coloristasDb[item.matricula] = { nome: item.nome, turno: item.turno };
+    });
+    console.log('Coloristas carregados:', Object.keys(coloristasDb).length);
+  } catch (e) {
+    console.error('Erro ao carregar coloristas:', e);
+    coloristasDb = {};
+  }
+}
+
+function lookupColorista(inputId, displayId) {
+  const matricula = document.getElementById(inputId).value.trim();
+  const displayEl = document.getElementById(displayId);
+  if (!displayEl) return;
+  const colorista = coloristasDb[matricula];
+  if (colorista) {
+    displayEl.textContent = `✅ ${colorista.nome} (${colorista.turno})`;
+    displayEl.style.color = 'var(--success)';
+  } else if (matricula.length > 0) {
+    displayEl.textContent = '❌ Matrícula não encontrada';
+    displayEl.style.color = 'var(--danger)';
+  } else {
+    displayEl.textContent = '';
+  }
+}
+
 function setBobinaId(text) {
   const bobinaInput = document.getElementById('bobinaid');
   bobinaInput.value = text;
@@ -207,12 +239,31 @@ function updateColorSample(element, l, a, b) {
 function saveOpState() {
   const opInput = document.getElementById("opid");
   const fixarOpCheckbox = document.getElementById("fixarop");
+  const matriculaInput = document.getElementById("matriculaId");
+  const fixarMatriculaCheckbox = document.getElementById("fixarmatricula");
+
+  // Campos do Processo (CMYK)
+  const pcMatriculaInput = document.getElementById("pc_matricula");
+  const pcFixarMatriculaCheckbox = document.getElementById("pc_fixarmatricula");
+
   if (opInput && fixarOpCheckbox) {
     localStorage.setItem('savedOp', opInput.value);
     localStorage.setItem('isOpFixed', fixarOpCheckbox.checked);
   }
+
+  if (matriculaInput && fixarMatriculaCheckbox) {
+    localStorage.setItem('savedMatricula', matriculaInput.value);
+    localStorage.setItem('isMatriculaFixed', fixarMatriculaCheckbox.checked);
+  }
+
+  if (pcMatriculaInput && pcFixarMatriculaCheckbox) {
+    localStorage.setItem('savedPcMatricula', pcMatriculaInput.value);
+    localStorage.setItem('isPcMatriculaFixed', pcFixarMatriculaCheckbox.checked);
+  }
 }
+
 function loadOpState() {
+  // Carregamento de OP
   const savedOp = localStorage.getItem('savedOp');
   const isOpFixed = localStorage.getItem('isOpFixed') === 'true';
   const opInput = document.getElementById("opid");
@@ -220,6 +271,28 @@ function loadOpState() {
   if (opInput && fixarOpCheckbox) {
     if (savedOp) opInput.value = savedOp;
     fixarOpCheckbox.checked = isOpFixed;
+  }
+
+  // Carregamento de Matrícula (Cor)
+  const savedMatricula = localStorage.getItem('savedMatricula');
+  const isMatriculaFixed = localStorage.getItem('isMatriculaFixed') === 'true';
+  const matriculaInput = document.getElementById("matriculaId");
+  const fixarMatriculaCheckbox = document.getElementById("fixarmatricula");
+  if (matriculaInput && fixarMatriculaCheckbox) {
+    if (savedMatricula) matriculaInput.value = savedMatricula;
+    fixarMatriculaCheckbox.checked = isMatriculaFixed;
+    if (savedMatricula) lookupColorista('matriculaId', 'coloristaNome');
+  }
+
+  // Carregamento de Matrícula (Processo)
+  const savedPcMatricula = localStorage.getItem('savedPcMatricula');
+  const isPcMatriculaFixed = localStorage.getItem('isPcMatriculaFixed') === 'true';
+  const pcMatriculaInput = document.getElementById("pc_matricula");
+  const pcFixarMatriculaCheckbox = document.getElementById("pc_fixarmatricula");
+  if (pcMatriculaInput && pcFixarMatriculaCheckbox) {
+    if (savedPcMatricula) pcMatriculaInput.value = savedPcMatricula;
+    pcFixarMatriculaCheckbox.checked = isPcMatriculaFixed;
+    if (savedPcMatricula) lookupColorista('pc_matricula', 'pc_colorista_nome');
   }
 }
 
@@ -305,6 +378,10 @@ function searchproducts() {
       document.getElementById("labb").value = "";
       document.getElementById("bobinaid").value = "";
       if (!document.getElementById("fixarop").checked) document.getElementById("opid").value = "";
+      if (!document.getElementById("fixarmatricula").checked) {
+        document.getElementById("matriculaId").value = "";
+        document.getElementById("coloristaNome").textContent = "";
+      }
       document.getElementById("resultmessage").textContent = "";
       document.getElementById("deltal").textContent = "";
       document.getElementById("deltaa").textContent = "";
@@ -428,6 +505,9 @@ async function inspectcolor() {
   const b2 = parseFloat(document.getElementById("labb").value);
   const bobina = document.getElementById("bobinaid").value.trim();
   const op = document.getElementById("opid").value.trim() || null;
+  const matricula = document.getElementById("matriculaId").value.trim() || null;
+  const coloristaInfo = matricula ? coloristasDb[matricula] : null;
+  const coloristaNome = coloristaInfo ? coloristaInfo.nome : null;
   if (isNaN(l2) || isNaN(a2) || isNaN(b2) || l2 < 0 || l2 > 100) { alert("Valores L, a, b inválidos."); return; }
   const deltae = ciede2000(selectedcolor.l, selectedcolor.a, selectedcolor.b, l2, a2, b2);
   const status = deltae <= 2 ? "Aprovado" : "Reprovado";
@@ -464,7 +544,8 @@ async function inspectcolor() {
     const { error } = await sb.from("color_inspections").insert([{
       product: selectedcolor.name, original_l: selectedcolor.l, original_a: selectedcolor.a, original_b: selectedcolor.b,
       inspected_l: l2, inspected_a: a2, inspected_b: b2, deltae: deltae.toFixed(2), status: status,
-      bobina: bobina || null, op: op, justification: justification
+      bobina: bobina || null, op: op, justification: justification,
+      matricula: matricula, colorista: coloristaNome
     }]);
     if (error) throw error;
 
@@ -1557,12 +1638,18 @@ async function handleVerificationAndSave() {
     return parseFloat(el.value.replace(',', '.'));
   };
 
+  const pcMatricula = document.getElementById('pc_matricula').value.trim() || null;
+  const pcColoristaInfo = pcMatricula ? coloristasDb[pcMatricula] : null;
+  const pcColoristaNome = pcColoristaInfo ? pcColoristaInfo.nome : null;
+
   const inspectionData = {
     perfil_densidade: "PADRÃO DINÂMICO",
     produto: productName,
     op_number: opNumber,
     bobina_filha_id: daughterCoilId,
     status_geral: overallStatusIsGood ? 'APROVADO' : 'REPROVADO',
+    matricula: pcMatricula,
+    colorista: pcColoristaNome,
     // Mapeamento legado
     densidade_c_medido: getNumericValue('dens_cyan_measured'),
     densidade_m_medido: getNumericValue('dens_magenta_measured'),
@@ -1752,7 +1839,7 @@ function getDates() {
   return { sd, ed };
 }
 async function fetchReportData(sdISO, edISO, opFilter) {
-  let query = sb.from("color_inspections").select("product, deltae, bobina, op, timestamp, original_l, original_a, original_b, inspected_l, inspected_a, inspected_b, justification").gte("timestamp", sdISO).lte("timestamp", edISO);
+  let query = sb.from("color_inspections").select("product, deltae, bobina, op, timestamp, original_l, original_a, original_b, inspected_l, inspected_a, inspected_b, justification, matricula, colorista").gte("timestamp", sdISO).lte("timestamp", edISO);
   if (opFilter !== null) query = query.eq("op", opFilter);
   query = query.order("product").order("timestamp", { ascending: true });
   const { data, error } = await query;
@@ -2012,11 +2099,11 @@ function getShift(timestamp) {
   const minute = parseInt(parts.find(p => p.type === 'minute').value, 10);
   const timeInMinutes = hour * 60 + minute;
 
-  // Turno A: 07:00 as 16:00
-  if (timeInMinutes >= 7 * 60 && timeInMinutes < 16 * 60) return 'Turno A';
-  // Turno B: 16:00 as 23:59
-  if (timeInMinutes >= 16 * 60 && timeInMinutes < 23 * 60 + 59) return 'Turno B';
-  // Turno C: 23:59 a 07:00 (inclui o dia seguinte até as 7h)
+  // Turno A: 07:40 as 16:00
+  if (timeInMinutes >= 7 * 60 + 40 && timeInMinutes < 16 * 60) return 'Turno A';
+  // Turno B: 16:01 as 23:59
+  if (timeInMinutes >= 16 * 60 + 1 && timeInMinutes <= 23 * 60 + 59) return 'Turno B';
+  // Turno C: 00:00 a 07:39
   return 'Turno C';
 }
 
@@ -2070,7 +2157,7 @@ function generateShiftComparison(dataToPlot) {
     });
 
     const categories = ['Turno A', 'Turno B', 'Turno C'];
-    const labels = ['Turno A (07h-16h)', 'Turno B (16h-00h)', 'Turno C (00h-07h)'];
+    const labels = ['Turno A (07h40-16h00)', 'Turno B (16h01-23h59)', 'Turno C (00h00-07h39)'];
     const colors = ['#f39c12', '#2c3e50', '#9b59b6'];
 
     // 1. Camada do Box Plot (Apenas Visual)
@@ -2199,7 +2286,7 @@ function generateHistogram() {
 }
 function downloadExcel() {
   if (!lastInspections.length) return;
-  const rows = [["Produto", "Bobina", "OP", "L Orig.", "a Orig.", "b Orig.", "L Insp.", "a Insp.", "b Insp.", "ΔE", "Data/Hora", "Justificativa"]];
+  const rows = [["Produto", "Bobina", "OP", "L Orig.", "a Orig.", "b Orig.", "L Insp.", "a Insp.", "b Insp.", "ΔE", "Data/Hora", "Colorista", "Matrícula", "Justificativa"]];
   // MODIFICAÇÃO: Correção do fuso horário para Brasília no Excel
   lastInspections.forEach(item => rows.push([
     item.product || "-",
@@ -2213,6 +2300,8 @@ function downloadExcel() {
     item.inspected_b ?? "-",
     item.deltae,
     item.timestamp ? new Date(item.timestamp).toLocaleString("pt-BR", { timeZone: 'America/Sao_Paulo' }) : "-",
+    item.colorista || "-",
+    item.matricula || "-",
     item.justification || "-"
   ]));
   const ws = window.XLSX.utils.aoa_to_sheet(rows);
@@ -2471,6 +2560,10 @@ window.onload = async function () {
   document.getElementById("reportEndDate").value = fmt(today);
   document.getElementById("opid").addEventListener('input', saveOpState);
   document.getElementById("fixarop").addEventListener('change', saveOpState);
+  document.getElementById("matriculaId").addEventListener('input', saveOpState);
+  document.getElementById("fixarmatricula").addEventListener('change', saveOpState);
+  document.getElementById("pc_matricula").addEventListener('input', saveOpState);
+  document.getElementById("pc_fixarmatricula").addEventListener('change', saveOpState);
 
   populateProfileSelector();
   populateFixedTables();
@@ -2485,6 +2578,7 @@ window.onload = async function () {
   // Consolidação do carregamento de dados
   console.log("Iniciando carregamento de dados...");
   await fetchProductDescriptions();
+  await fetchColoristas();
   await loadproducts();
   await loadProcessStandardsDb();
   await loadInitialInspections();
