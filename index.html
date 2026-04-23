@@ -778,14 +778,16 @@
           <label for="fixarop"
             style="margin-bottom: 0; font-size: 0.9rem; color: var(--text-dark); text-transform: none;">Fixar OP</label>
         </div>
-        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-          <input type="text" id="matriculaId" placeholder="Matrícula do Colorista" style="flex: 1;" oninput="lookupColorista('matriculaId', 'coloristaNome')">
-          <span id="coloristaNome" style="font-weight: 700; color: var(--primary); font-size: 0.95rem; min-width: 150px;"></span>
+        <div style="display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px;">
+          <input type="text" id="matriculaId" placeholder="Matrícula do Colorista"
+            oninput="lookupColorista('matriculaId', 'coloristaNome')">
+          <span id="coloristaNome" style="font-weight: 700; color: var(--primary); font-size: 0.95rem;"></span>
         </div>
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
           <input type="checkbox" id="fixarmatricula" style="width: auto; height: auto;">
           <label for="fixarmatricula"
-            style="margin-bottom: 0; font-size: 0.9rem; color: var(--text-dark); text-transform: none;">Fixar Matrícula</label>
+            style="margin-bottom: 0; font-size: 0.9rem; color: var(--text-dark); text-transform: none;">Fixar
+            Matrícula</label>
         </div>
         <button onclick="inspectcolor()">Inspecionar</button>
         <div id="resultmessage" class="result-message"></div>
@@ -1004,13 +1006,16 @@
         </div>
         <div class="input-group">
           <label for="pc_matricula"><i class="fas fa-id-badge"></i> Matrícula Colorista</label>
-          <input type="text" id="pc_matricula" placeholder="Ex: 9373" oninput="lookupColorista('pc_matricula', 'pc_colorista_nome')">
-          <span id="pc_colorista_nome" style="font-weight: 700; color: var(--primary); font-size: 0.9rem; margin-top: 4px;"></span>
+          <input type="text" id="pc_matricula" placeholder="Ex: 9373"
+            oninput="lookupColorista('pc_matricula', 'pc_colorista_nome')">
+          <span id="pc_colorista_nome"
+            style="font-weight: 700; color: var(--primary); font-size: 0.9rem; margin-top: 4px;"></span>
         </div>
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; grid-column: 1 / -1;">
           <input type="checkbox" id="pc_fixarmatricula" style="width: auto; height: auto;">
           <label for="pc_fixarmatricula"
-            style="margin-bottom: 0; font-size: 0.9rem; color: var(--text-dark); text-transform: none;">Fixar Matrícula</label>
+            style="margin-bottom: 0; font-size: 0.9rem; color: var(--text-dark); text-transform: none;">Fixar
+            Matrícula</label>
         </div>
       </div>
 
@@ -1448,33 +1453,52 @@
   </div>
 
   <!-- MODAL DE JUSTIFICATIVA OBRIGATÓRIA -->
-  <div id="justificationModal" style="display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(5px); justify-content: center; align-items: center;">
-    <div style="background: white; width: 90%; max-width: 500px; padding: 30px; border-radius: 15px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); border-top: 8px solid var(--active-red); position: relative; animation: modalBounce 0.3s ease-out;">
-      <h2 id="modalTitle" style="color: var(--active-red); margin-top: 0; font-family: 'Poppins', sans-serif; display: flex; align-items: center; gap: 10px;">
+  <div id="justificationModal"
+    style="display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(5px); justify-content: center; align-items: center;">
+    <div
+      style="background: white; width: 90%; max-width: 500px; padding: 30px; border-radius: 15px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); border-top: 8px solid var(--active-red); position: relative; animation: modalBounce 0.3s ease-out;">
+      <h2 id="modalTitle"
+        style="color: var(--active-red); margin-top: 0; font-family: 'Poppins', sans-serif; display: flex; align-items: center; gap: 10px;">
         <i class="fas fa-exclamation-triangle"></i> SEGUNDA REPROVAÇÃO!
       </h2>
-      <p id="modalMessage" style="color: #495057; line-height: 1.6; margin-bottom: 20px; font-weight: 500;">Esta OP já teve uma reprovação anterior. Justifique a ação tomada para correção.</p>
-      
+      <p id="modalMessage" style="color: #495057; line-height: 1.6; margin-bottom: 20px; font-weight: 500;">Esta OP já
+        teve uma reprovação anterior. Justifique a ação tomada para correção.</p>
+
       <div style="margin-bottom: 20px;">
-        <label for="modalInput" style="display: block; font-size: 0.75rem; font-weight: 700; color: #6c757d; text-transform: uppercase; margin-bottom: 8px;">Descrição da Ação Corretiva:</label>
-        <textarea id="modalInput" placeholder="Ex: Ajustada viscosidade da tinta e pressão do cilindro..." 
+        <label for="modalInput"
+          style="display: block; font-size: 0.75rem; font-weight: 700; color: #6c757d; text-transform: uppercase; margin-bottom: 8px;">Descrição
+          da Ação Corretiva:</label>
+        <textarea id="modalInput" placeholder="Ex: Ajustada viscosidade da tinta e pressão do cilindro..."
           style="width: 100%; height: 100px; padding: 12px; border-radius: 8px; border: 2px solid #dee2e6; font-family: 'Poppins', sans-serif; font-size: 0.95rem; resize: none; box-sizing: border-box; outline: none; transition: border-color 0.2s;"></textarea>
-        <div id="modalHint" style="font-size: 0.75rem; color: #e74c3c; margin-top: 5px; font-weight: 600;">Mínimo 5 caracteres.</div>
+        <div id="modalHint" style="font-size: 0.75rem; color: #e74c3c; margin-top: 5px; font-weight: 600;">Mínimo 5
+          caracteres.</div>
       </div>
-      
-      <button id="modalSubmitBtn" disabled style="width: 100%; background: #28a745; color: white; border: none; padding: 15px; border-radius: 8px; font-size: 1rem; font-weight: 700; cursor: not-allowed; opacity: 0.5; transition: all 0.2s;">
+
+      <button id="modalSubmitBtn" disabled
+        style="width: 100%; background: #28a745; color: white; border: none; padding: 15px; border-radius: 8px; font-size: 1rem; font-weight: 700; cursor: not-allowed; opacity: 0.5; transition: all 0.2s;">
         <i class="fas fa-save"></i> SALVAR JUSTIFICATIVA E CONTINUAR
       </button>
-      
-      <div style="text-align: center; margin-top: 15px; font-size: 0.7rem; color: #999;">A ação é obrigatória por norma técnica. Bloqueado até preencher.</div>
+
+      <div style="text-align: center; margin-top: 15px; font-size: 0.7rem; color: #999;">A ação é obrigatória por norma
+        técnica. Bloqueado até preencher.</div>
     </div>
   </div>
 
   <style>
     @keyframes modalBounce {
-      0% { transform: scale(0.85); opacity: 0; }
-      70% { transform: scale(1.05); opacity: 1; }
-      100% { transform: scale(1); }
+      0% {
+        transform: scale(0.85);
+        opacity: 0;
+      }
+
+      70% {
+        transform: scale(1.05);
+        opacity: 1;
+      }
+
+      100% {
+        transform: scale(1);
+      }
     }
   </style>
 
