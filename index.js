@@ -448,14 +448,57 @@ async function searchProcessStandardsTab() {
   msgEl.textContent = "Pesquisando...";
   msgEl.style.color = "var(--primary)";
 
-  // Verifica se existe no banco de padrões
-  if (processStandardsdb.some(p => p.product_code === code)) {
+  // Verifica se existe no banco de padrões localmente
+  const existsLocal = processStandardsdb.some(p => String(p.product_code).trim() === String(code).trim());
+  
+  if (existsLocal) {
     await editProcessProduct(code);
     msgEl.textContent = "Padrões carregados com sucesso!";
     msgEl.style.color = "var(--success)";
   } else {
+    // Fallback: tentar direto no banco com busca flexível
+    try {
+      // Tenta busca exata primeiro, depois busca parcial se falhar
+      let { data, error } = await sb.from("process_standards")
+        .select("product_code")
+        .ilike("product_code", code) // ilike é case-insensitive e mais flexível em alguns drivers
+        .limit(1);
+      
+      if (error) {
+        console.error("Erro na busca fallback:", error);
+        msgEl.textContent = `Erro na pesquisa: ${error.message}`;
+        msgEl.style.color = "var(--danger)";
+        return;
+      }
+
+      // Se não achou com ilike exato, tenta conter (caso haja espaços invisíveis no banco)
+      if (!data || data.length === 0) {
+         const resp = await sb.from("process_standards")
+          .select("product_code")
+          .ilike("product_code", `%${code}%`)
+          .limit(1);
+         data = resp.data;
+      }
+
+      if (data && data.length > 0) {
+        // Se achou no banco mas não no cache, o cache está desatualizado
+        const actualCode = data[0].product_code;
+        await editProcessProduct(actualCode);
+        msgEl.textContent = "Padrões carregados (Sincronizado com Banco)!";
+        msgEl.style.color = "var(--success)";
+        // Força atualização do cache local
+        loadProcessStandardsDb();
+        return;
+      }
+    } catch(e) {
+      console.error("Exceção na pesquisa fallback:", e);
+      msgEl.textContent = `Erro inesperado: ${e.message}`;
+      msgEl.style.color = "var(--danger)";
+      return;
+    }
+
     resetProcessRegisterTable(true);
-    msgEl.textContent = "Nenhum padrão existente encontrado para este código.";
+    msgEl.textContent = `Nenhum padrão encontrado para o código [${code}].`;
     msgEl.style.color = "var(--warning)";
   }
 }
@@ -1839,12 +1882,43 @@ function getDates() {
   return { sd, ed };
 }
 async function fetchReportData(sdISO, edISO, opFilter) {
-  let query = sb.from("color_inspections").select("product, deltae, bobina, op, timestamp, original_l, original_a, original_b, inspected_l, inspected_a, inspected_b, justification, matricula, colorista").gte("timestamp", sdISO).lte("timestamp", edISO);
-  if (opFilter !== null) query = query.eq("op", opFilter);
-  query = query.order("product").order("timestamp", { ascending: true });
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
+  let allData = [];
+  let offset = 0;
+  const batchSize = 1000;
+  let keepFetching = true;
+
+  try {
+    while (keepFetching) {
+      let query = sb.from("color_inspections")
+        .select("product, deltae, bobina, op, timestamp, original_l, original_a, original_b, inspected_l, inspected_a, inspected_b, justification, matricula, colorista")
+        .gte("timestamp", sdISO)
+        .lte("timestamp", edISO);
+      
+      if (opFilter !== null) query = query.eq("op", opFilter);
+      
+      // Ordenação consistente para paginação
+      query = query.order("product").order("timestamp", { ascending: true })
+                   .range(offset, offset + batchSize - 1);
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      
+      if (data && data.length > 0) {
+        allData = allData.concat(data);
+        if (data.length < batchSize) {
+          keepFetching = false;
+        } else {
+          offset += batchSize;
+        }
+      } else {
+        keepFetching = false;
+      }
+    }
+    return allData;
+  } catch (e) {
+    console.error("Erro ao buscar dados do relatório de cor:", e);
+    throw e;
+  }
 }
 function getDeltaEColor(deltae) {
   if (isNaN(deltae) || deltae === null) return "#e0e0e0";
@@ -2033,11 +2107,42 @@ async function generateReport() {
 }
 
 async function fetchProcessReportData(sdISO, edISO, opFilter) {
-  let query = sb.from("inspecoes_processo").select("*").gte("created_at", sdISO).lte("created_at", edISO);
-  if (opFilter !== null) query = query.eq("op_number", opFilter);
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
+  let allData = [];
+  let offset = 0;
+  const batchSize = 1000;
+  let keepFetching = true;
+
+  try {
+    while (keepFetching) {
+      let query = sb.from("inspecoes_processo")
+        .select("*")
+        .gte("created_at", sdISO)
+        .lte("created_at", edISO);
+      
+      if (opFilter !== null) query = query.eq("op_number", opFilter);
+      
+      query = query.order("created_at", { ascending: true })
+                   .range(offset, offset + batchSize - 1);
+      
+      const { data, error } = await query;
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        allData = allData.concat(data);
+        if (data.length < batchSize) {
+          keepFetching = false;
+        } else {
+          offset += batchSize;
+        }
+      } else {
+        keepFetching = false;
+      }
+    }
+    return allData;
+  } catch (e) {
+    console.error("Erro ao buscar dados do relatório de processo:", e);
+    throw e;
+  }
 }
 
 function renderUnifiedDashboard(colorData, processData) {
@@ -2607,20 +2712,40 @@ function analyzeCurrentInspection() {
 
 async function loadProcessStandardsDb() {
   const tbody = document.getElementById('processStandardsBody');
-  if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Carregando...</td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Carregando...</td></tr>';
+
+  let allStandards = [];
+  let offset = 0;
+  const batchSize = 1000;
+  let keepFetching = true;
 
   try {
-    const { data, error } = await sb.from("process_standards").select("product_code").order('product_code');
-    if (error) throw error;
+    while (keepFetching) {
+      const { data, error } = await sb.from("process_standards")
+                                     .select("product_code")
+                                     .order('product_code')
+                                     .range(offset, offset + batchSize - 1);
+      if (error) throw error;
+      
+      if (data && data.length > 0) {
+        allStandards = allStandards.concat(data);
+        if (data.length < batchSize) {
+          keepFetching = false;
+        } else {
+          offset += batchSize;
+        }
+      } else {
+        keepFetching = false;
+      }
+    }
 
-    const uniqueProducts = [...new Set(data.map(i => i.product_code))];
+    const uniqueProducts = [...new Set(allStandards.map(i => i.product_code))];
     processStandardsdb = uniqueProducts.map(code => ({ product_code: code }));
 
     updateProcessStandardsTable();
   } catch (e) {
     console.error("Erro ao carregar padrões de processo:", e);
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color: var(--danger);">Erro ao carregar dados.</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color: var(--danger);">Erro ao carregar dados.</td></tr>';
   }
 }
 
@@ -2912,16 +3037,29 @@ async function saveProcessStandards() {
   }
 
   try {
-    await sb.from("process_standards").delete().eq("product_code", product_code);
-    const { error } = await sb.from("process_standards").insert(dataToSave);
-    if (error) throw error;
+    msgEl.textContent = "Salvando padrões...";
+    msgEl.style.color = "var(--primary)";
+
+    // 1. Limpar padrões existentes para este produto
+    const { error: delError } = await sb.from("process_standards").delete().eq("product_code", product_code);
+    if (delError) {
+       throw new Error("Erro ao limpar dados antigos: " + delError.message);
+    }
+
+    // 2. Inserir novos padrões
+    const { error: insError } = await sb.from("process_standards").insert(dataToSave);
+    if (insError) {
+       throw new Error("Erro ao inserir novos dados: " + insError.message);
+    }
 
     msgEl.textContent = "Padrões salvos com sucesso!";
     msgEl.style.color = "var(--success)";
-    loadProcessStandardsDb();
+    
+    // 3. Atualizar cache local e interface
+    await loadProcessStandardsDb();
   } catch (e) {
-    console.error("Erro ao salvar padrões:", e);
-    msgEl.textContent = "Erro ao salvar padrões: " + e.message;
+    console.error("Erro completo ao salvar padrões:", e);
+    msgEl.textContent = e.message;
     msgEl.style.color = "var(--danger)";
   }
 }
