@@ -723,6 +723,7 @@
       <div class="nav-tab" onclick="showTab('process-register')">CADASTRO CMYK</div>
       <div class="nav-tab" onclick="showTab('description-manager')">GERENCIAR DESCRIÇÕES</div>
       <div class="nav-tab" onclick="showTab('profiles-history')">Perfis Históricos</div>
+      <div class="nav-tab" onclick="showTab('tintas')">Tintas</div>
     </div>
 
     <div id="search-tab" class="tab-content active">
@@ -1447,6 +1448,119 @@
 
           <div id="descriptionManagerMessage" class="result-message"
             style="text-align: center; font-weight: 600; min-height: 24px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tintas-tab" class="tab-content">
+      <h1><i class="fas fa-fill-drip"></i> Módulo de Tintas</h1>
+
+      <!-- Sub-navegação interna -->
+      <div class="tinta-section-nav">
+        <button class="tinta-section-btn active" onclick="showTintaSection('tinta-inspect')"><i class="fas fa-search"></i> Inspecionar</button>
+        <button class="tinta-section-btn" onclick="showTintaSection('tinta-register')"><i class="fas fa-plus-circle"></i> Cadastrar</button>
+        <button class="tinta-section-btn" onclick="showTintaSection('tinta-history')"><i class="fas fa-history"></i> Histórico</button>
+      </div>
+
+      <!-- SEÇÃO: Inspecionar Tinta -->
+      <div id="tinta-inspect-section" class="tinta-section active">
+        <h2>Inspecionar Padrão de Tinta</h2>
+        <div class="input-group">
+          <label for="tinta_cad_code">Código CAD da Tinta:</label>
+          <input type="text" id="tinta_cad_code" placeholder="Digite o código numérico da tinta...">
+        </div>
+        <button onclick="searchPaintStandards()">Pesquisar Padrão</button>
+
+        <div class="results" id="tinta_results"></div>
+
+        <div class="inspector" id="tinta_inspector" style="display:none;">
+          <div class="tinta-inspector-layout">
+            <div class="tinta-color-displays">
+              <div class="tinta-color-box">
+                <canvas id="tinta_canvas_ref" width="180" height="180"></canvas>
+                <span id="tinta_standard_name">Padrão</span>
+              </div>
+              <div class="tinta-color-box">
+                <canvas id="tinta_canvas_sample" width="180" height="180"></canvas>
+                <span>Amostra Medida</span>
+              </div>
+            </div>
+            <div class="tinta-inputs">
+              <input type="number" id="tinta_lab_l" placeholder="Valor L*" oninput="updatePaintSampleCanvas()">
+              <input type="number" id="tinta_lab_a" placeholder="Valor a*" oninput="updatePaintSampleCanvas()">
+              <input type="number" id="tinta_lab_b" placeholder="Valor b*" oninput="updatePaintSampleCanvas()">
+            </div>
+            <button onclick="inspectPaint()">Verificar e Salvar Inspeção</button>
+            <div id="tinta_result_area"></div>
+            <button id="tinta_diagnostico_btn" class="btn-secondary" onclick="analyzeCurrentPaintInspection()" style="display: none; margin-top: 15px;">Analisar Diagnóstico</button>
+            <div class="back-button" onclick="tinta_goback()">Voltar para Pesquisa</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SEÇÃO: Cadastrar Tinta -->
+      <div id="tinta-register-section" class="tinta-section">
+        <h2>Cadastrar Novo Padrão de Tinta</h2>
+        <div class="input-group">
+          <label for="new_tinta_cad_code">Código CAD da Tinta:</label>
+          <input type="text" id="new_tinta_cad_code" placeholder="Ex: 1426">
+        </div>
+        <div class="input-group">
+          <label for="new_tinta_l">Valor L*:</label>
+          <input type="number" id="new_tinta_l" placeholder="0-100" oninput="updateNewPaintPreview()">
+        </div>
+        <div class="input-group">
+          <label for="new_tinta_a">Valor a*:</label>
+          <input type="number" id="new_tinta_a" placeholder="-128 a 127" oninput="updateNewPaintPreview()">
+        </div>
+        <div class="input-group">
+          <label for="new_tinta_b">Valor b*:</label>
+          <input type="number" id="new_tinta_b" placeholder="-128 a 127" oninput="updateNewPaintPreview()">
+        </div>
+        <div class="color-preview">
+          <div class="input-group">
+            <label>Prévia da Cor:</label>
+            <div id="new_tinta_preview" class="color-sample" style="margin: 10px 0; width: 50px; height: 50px;"></div>
+          </div>
+        </div>
+        <button onclick="registerNewPaint()">Cadastrar Padrão de Tinta</button>
+        <div id="tinta_register_message" class="result-message"></div>
+
+        <div id="tinta_list">
+          <h2>Padrões de Tinta Cadastrados</h2>
+          <div class="table-container">
+            <table id="tinta_standards_table">
+              <thead>
+                <tr><th>Código CAD</th><th>L*</th><th>a*</th><th>b*</th><th>Cor</th><th>Ações</th></tr>
+              </thead>
+              <tbody id="tinta_standards_body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- SEÇÃO: Histórico de Tintas -->
+      <div id="tinta-history-section" class="tinta-section">
+        <h2>Histórico de Inspeções de Tinta</h2>
+        <div class="search-controls">
+          <div class="input-group">
+            <label for="tinta_history_search">Pesquisar por Código CAD:</label>
+            <input type="text" id="tinta_history_search" placeholder="Digite o código...">
+          </div>
+          <button onclick="searchPaintInspections()">Pesquisar</button>
+          <button class="btn-secondary" onclick="clearPaintHistoryFilter()">Limpar / Mostrar Todos</button>
+        </div>
+        <div class="table-container">
+          <table id="tinta_history_table">
+            <thead>
+              <tr>
+                <th>Código CAD</th><th>L* Padrão</th><th>a* Padrão</th><th>b* Padrão</th>
+                <th>L* Medido</th><th>a* Medido</th><th>b* Medido</th>
+                <th>ΔE2000</th><th>Status</th><th>Data/Hora</th><th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="tinta_history_body"></tbody>
+          </table>
         </div>
       </div>
     </div>

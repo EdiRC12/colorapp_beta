@@ -7,6 +7,10 @@ let productsdb = [];
 let pantonedb = [];
 let processStandardsdb = [];
 let selectedcolor = null;
+let paintStandardsDb = [];
+let allPaintInspections = [];
+let selectedPaintStandard = null;
+let editingPaintId = null;
 let allInspectionsData = [];
 let lastInspections = [];
 let histogramChartInstance = null;
@@ -340,6 +344,9 @@ function showTab(tabId) {
       break;
     case 'description-manager':
       document.getElementById('descriptionManagerMessage').textContent = "";
+      break;
+    case 'tintas':
+      if (paintStandardsDb.length === 0) loadPaintStandards();
       break;
   }
 }
@@ -3130,4 +3137,369 @@ async function editProcessProduct(productCode) {
     alert("Erro ao carregar dados: " + e.message);
   }
 }
+
+// ============================================
+// MÓDULO DE TINTAS
+// ============================================
+
+function showTintaSection(sectionId) {
+  document.querySelectorAll('#tintas-tab .tinta-section').forEach(sec => {
+    sec.classList.remove('active');
+  });
+  document.querySelectorAll('#tintas-tab .tinta-section-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  const targetSection = document.getElementById(sectionId + '-section');
+  if (targetSection) {
+    targetSection.classList.add('active');
+  }
+  const targetBtn = Array.from(document.querySelectorAll('#tintas-tab .tinta-section-btn')).find(btn => 
+    btn.getAttribute('onclick').includes(`'${sectionId}'`)
+  );
+  if (targetBtn) {
+    targetBtn.classList.add('active');
+  }
+  if (sectionId === 'tinta-register' && paintStandardsDb.length === 0) {
+    loadPaintStandards();
+  }
+  if (sectionId === 'tinta-history' && allPaintInspections.length === 0) {
+    loadPaintInspections();
+  }
+}
+
+function drawColorOnCanvas(canvasId, lab, title) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const { l, a, b } = lab;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = `lab(${l}% ${a} ${b})`;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = l > 55 ? '#000000' : '#FFFFFF';
+  ctx.font = "bold 16px 'Poppins', sans-serif";
+  ctx.textAlign = 'center';
+  ctx.fillText(title, canvas.width / 2, 30);
+  ctx.font = "14px 'JetBrains Mono', monospace";
+  ctx.fillText(`L*: ${l.toFixed(2)}`, canvas.width / 2, canvas.height / 2);
+  ctx.fillText(`a*: ${a.toFixed(2)}`, canvas.width / 2, canvas.height / 2 + 20);
+  ctx.fillText(`b*: ${b.toFixed(2)}`, canvas.width / 2, canvas.height / 2 + 40);
+}
+
+async function loadPaintStandards() {
+  try {
+    const { data, error } = await sb.from("paint_standards").select("*").order('cad_code');
+    if (error) throw error;
+    paintStandardsDb = data || [];
+    updatePaintStandardsTable();
+  } catch (e) {
+    alert("Erro ao carregar padrões de tinta: " + e.message);
+  }
+}
+
+async function searchPaintStandards() {
+  const searchTerm = document.getElementById("tinta_cad_code").value.trim();
+  const resultsDiv = document.getElementById("tinta_results");
+  resultsDiv.innerHTML = "";
+  resultsDiv.style.display = "flex";
+  document.getElementById("tinta_inspector").style.display = "none";
+  
+  // Handle back button hide
+  const backBtn = document.getElementById("fixedbackbutton");
+  if (backBtn) backBtn.style.display = "none";
+
+  let matches;
+  if (!searchTerm) {
+    matches = paintStandardsDb.slice();
+  } else {
+    matches = paintStandardsDb.filter(p => p.cad_code.toLowerCase().includes(searchTerm.toLowerCase()));
+  }
+
+  if (!matches || matches.length === 0) {
+    resultsDiv.innerHTML = "<div style='color: var(--text-muted); font-weight: 500; padding: 10px 0;'>Nenhum padrão de tinta encontrado.</div>";
+    return;
+  }
+  matches.forEach(match => {
+    const matchdiv = document.createElement("div");
+    matchdiv.classList.add("match");
+    matchdiv.innerHTML = `<span>CAD: ${match.cad_code}</span><div class="color-sample" style="background-color: lab(${match.l}% ${match.a} ${match.b});"></div>`;
+    matchdiv.onclick = () => selectPaintStandard(match);
+    resultsDiv.appendChild(matchdiv);
+  });
+}
+
+function selectPaintStandard(standard) {
+  selectedPaintStandard = standard;
+  document.getElementById("tinta_results").style.display = "none";
+  document.getElementById("tinta_inspector").style.display = "flex";
+  
+  const backBtn = document.getElementById("fixedbackbutton");
+  if (backBtn) {
+    backBtn.setAttribute("onclick", "tinta_goback()");
+    backBtn.style.display = "block";
+  }
+  
+  document.getElementById("tinta_diagnostico_btn").style.display = "none";
+  document.getElementById("tinta_lab_l").value = "";
+  document.getElementById("tinta_lab_a").value = "";
+  document.getElementById("tinta_lab_b").value = "";
+  document.getElementById("tinta_result_area").innerHTML = "";
+  document.getElementById("tinta_standard_name").textContent = `Padrão CAD: ${standard.cad_code}`;
+  drawColorOnCanvas('tinta_canvas_ref', { l: standard.l, a: standard.a, b: standard.b }, `CAD: ${standard.cad_code}`);
+  drawColorOnCanvas('tinta_canvas_sample', { l: 80, a: 0, b: 0 }, 'Amostra');
+}
+
+function updatePaintSampleCanvas() {
+  const l = parseFloat(document.getElementById("tinta_lab_l").value) || 80;
+  const a = parseFloat(document.getElementById("tinta_lab_a").value) || 0;
+  const b = parseFloat(document.getElementById("tinta_lab_b").value) || 0;
+  drawColorOnCanvas('tinta_canvas_sample', { l, a, b }, 'Amostra');
+}
+
+async function inspectPaint() {
+  if (!selectedPaintStandard) {
+    alert("Nenhum padrão de tinta selecionado!");
+    return;
+  }
+  const l2 = parseFloat(document.getElementById("tinta_lab_l").value);
+  const a2 = parseFloat(document.getElementById("tinta_lab_a").value);
+  const b2 = parseFloat(document.getElementById("tinta_lab_b").value);
+  if (isNaN(l2) || isNaN(a2) || isNaN(b2)) {
+    alert("Valores L*, a*, b* medidos são inválidos.");
+    return;
+  }
+  const deltaE = ciede2000(selectedPaintStandard.l, selectedPaintStandard.a, selectedPaintStandard.b, l2, a2, b2);
+  const status = deltaE <= 2.0 ? "Aprovado" : "Reprovado";
+  const statusClass = status.toLowerCase();
+  const resultArea = document.getElementById("tinta_result_area");
+  resultArea.innerHTML = `
+    <div class="tinta-result-card ${statusClass}">
+      <h3 class="tinta-result-header ${statusClass}">${status.toUpperCase()}</h3>
+      <div class="tinta-result-details">
+        Diferença de Cor (ΔE2000): <strong>${deltaE.toFixed(2)}</strong>
+      </div>
+    </div>
+  `;
+  try {
+    const { error } = await sb.from("paint_inspections").insert([{
+      cad_code: selectedPaintStandard.cad_code,
+      standard_l: selectedPaintStandard.l, standard_a: selectedPaintStandard.a, standard_b: selectedPaintStandard.b,
+      inspected_l: l2, inspected_a: a2, inspected_b: b2,
+      delta_e: parseFloat(deltaE.toFixed(2)), status: status
+    }]);
+    if (error) throw error;
+    resultArea.querySelector('.tinta-result-details').innerHTML += '<br><span style="color:var(--success); font-size:0.9em;">Inspeção salva com sucesso!</span>';
+  } catch (e) {
+    alert("Erro ao salvar inspeção de tinta: " + e.message);
+  }
+  document.getElementById("tinta_diagnostico_btn").style.display = "block";
+}
+
+function tinta_goback() {
+  document.getElementById("tinta_inspector").style.display = "none";
+  document.getElementById("tinta_results").style.display = "flex";
+  
+  const backBtn = document.getElementById("fixedbackbutton");
+  if (backBtn) {
+    backBtn.setAttribute("onclick", "goback()");
+    backBtn.style.display = "none";
+  }
+  selectedPaintStandard = null;
+}
+
+async function registerNewPaint() {
+  const cad_code = document.getElementById("new_tinta_cad_code").value.trim();
+  const l = parseFloat(document.getElementById("new_tinta_l").value);
+  const a = parseFloat(document.getElementById("new_tinta_a").value);
+  const b = parseFloat(document.getElementById("new_tinta_b").value);
+  const messageDiv = document.getElementById("tinta_register_message");
+  if (!cad_code || isNaN(l) || isNaN(a) || isNaN(b)) {
+    messageDiv.textContent = "Dados inválidos. Preencha todos os campos corretamente.";
+    messageDiv.style.color = "var(--danger)";
+    return;
+  }
+  try {
+    if (editingPaintId) {
+      const { error } = await sb.from("paint_standards").update({ cad_code, l, a, b }).eq("id", editingPaintId);
+      if (error) throw error;
+      messageDiv.textContent = "Padrão de tinta atualizado com sucesso!";
+      messageDiv.style.color = "var(--success)";
+    } else {
+      const { error } = await sb.from("paint_standards").insert([{ cad_code, l, a, b }]);
+      if (error) throw error;
+      messageDiv.textContent = "Padrão de tinta cadastrado com sucesso!";
+      messageDiv.style.color = "var(--success)";
+    }
+    document.getElementById("new_tinta_cad_code").value = "";
+    document.getElementById("new_tinta_l").value = "";
+    document.getElementById("new_tinta_a").value = "";
+    document.getElementById("new_tinta_b").value = "";
+    editingPaintId = null;
+    updateNewPaintPreview();
+    await loadPaintStandards();
+  } catch (e) {
+    messageDiv.textContent = "Erro ao salvar padrão: " + e.message;
+    messageDiv.style.color = "var(--danger)";
+  }
+}
+
+function updateNewPaintPreview() {
+  const l = parseFloat(document.getElementById("new_tinta_l").value) || 80;
+  const a = parseFloat(document.getElementById("new_tinta_a").value) || 0;
+  const b = parseFloat(document.getElementById("new_tinta_b").value) || 0;
+  updateColorSample(document.getElementById("new_tinta_preview"), l, a, b);
+}
+
+function updatePaintStandardsTable() {
+  const tableBody = document.getElementById("tinta_standards_body");
+  tableBody.innerHTML = "";
+  if (paintStandardsDb.length === 0) {
+    tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center;">Nenhum padrão cadastrado.</td></tr>`;
+    return;
+  }
+  paintStandardsDb.forEach(p => {
+    const row = tableBody.insertRow();
+    row.innerHTML = `
+      <td>${p.cad_code}</td>
+      <td>${p.l.toFixed(2)}</td>
+      <td>${p.a.toFixed(2)}</td>
+      <td>${p.b.toFixed(2)}</td>
+      <td><div class="color-sample" style="background-color: lab(${p.l}% ${p.a} ${p.b});"></div></td>
+      <td>
+        <button class="btn-secondary btn-small" onclick="editPaintStandard(${p.id})">Alterar</button>
+        <button class="btn-danger btn-small" onclick="deletePaintStandard(${p.id})">Remover</button>
+      </td>
+    `;
+  });
+}
+
+function editPaintStandard(id) {
+  const standard = paintStandardsDb.find(p => p.id === id);
+  if (!standard) {
+    alert("Padrão de tinta não encontrado para edição.");
+    return;
+  }
+  editingPaintId = id;
+  document.getElementById("new_tinta_cad_code").value = standard.cad_code;
+  document.getElementById("new_tinta_l").value = standard.l;
+  document.getElementById("new_tinta_a").value = standard.a;
+  document.getElementById("new_tinta_b").value = standard.b;
+  updateNewPaintPreview();
+  const messageDiv = document.getElementById("tinta_register_message");
+  messageDiv.textContent = `Editando padrão existente CAD ${standard.cad_code}. Ao salvar, o registro será atualizado.`;
+  messageDiv.style.color = "var(--warning)";
+  showTab('tintas');
+  showTintaSection('tinta-register');
+}
+
+async function deletePaintStandard(id) {
+  if (!confirm("Tem certeza que deseja remover este padrão de tinta?")) return;
+  try {
+    const { error } = await sb.from("paint_standards").delete().eq("id", id);
+    if (error) throw error;
+    alert("Padrão removido com sucesso!");
+    if (editingPaintId === id) {
+      editingPaintId = null;
+      document.getElementById("new_tinta_cad_code").value = "";
+      document.getElementById("new_tinta_l").value = "";
+      document.getElementById("new_tinta_a").value = "";
+      document.getElementById("new_tinta_b").value = "";
+      updateNewPaintPreview();
+      document.getElementById("tinta_register_message").textContent = "";
+    }
+    await loadPaintStandards();
+  } catch (e) {
+    alert("Erro ao remover padrão: " + e.message);
+  }
+}
+
+async function loadPaintInspections() {
+  try {
+    const { data, error } = await sb.from("paint_inspections").select("*").order('created_at', { ascending: false });
+    if (error) throw error;
+    allPaintInspections = data || [];
+    updatePaintInspectionsTable(allPaintInspections);
+  } catch (e) {
+    alert("Erro ao carregar histórico de tintas: " + e.message);
+  }
+}
+
+function updatePaintInspectionsTable(data) {
+  const tableBody = document.getElementById("tinta_history_body");
+  tableBody.innerHTML = "";
+  if (data.length === 0) {
+    tableBody.innerHTML = `<tr><td colspan="11" style="text-align:center;">Nenhuma inspeção encontrada.</td></tr>`;
+    return;
+  }
+  data.forEach(item => {
+    const statusClass = item.status === 'Aprovado' ? 'status-aprovado' : 'status-reprovado';
+    const formattedDate = new Date(item.created_at).toLocaleString("pt-BR", { timeZone: 'America/Sao_Paulo' });
+    const row = tableBody.insertRow();
+    row.innerHTML = `
+      <td>${item.cad_code}</td>
+      <td>${item.standard_l.toFixed(2)}</td>
+      <td>${item.standard_a.toFixed(2)}</td>
+      <td>${item.standard_b.toFixed(2)}</td>
+      <td>${item.inspected_l.toFixed(2)}</td>
+      <td>${item.inspected_a.toFixed(2)}</td>
+      <td>${item.inspected_b.toFixed(2)}</td>
+      <td>${item.delta_e}</td>
+      <td class="status-cell ${statusClass}">${item.status}</td>
+      <td>${formattedDate}</td>
+      <td>
+        <button class="btn-secondary btn-small" onclick="analyzeInspectionInDiagnostic(${item.standard_l}, ${item.standard_a}, ${item.standard_b}, ${item.inspected_l}, ${item.inspected_a}, ${item.inspected_b})">
+          <i class="fas fa-chart-bar"></i> Analisar
+        </button>
+      </td>
+    `;
+  });
+}
+
+function searchPaintInspections() {
+  const searchTerm = document.getElementById("tinta_history_search").value.trim().toLowerCase();
+  if (!searchTerm) {
+    updatePaintInspectionsTable(allPaintInspections);
+    return;
+  }
+  const filteredData = allPaintInspections.filter(item => item.cad_code.toLowerCase().includes(searchTerm));
+  updatePaintInspectionsTable(filteredData);
+}
+
+function clearPaintHistoryFilter() {
+  document.getElementById("tinta_history_search").value = "";
+  updatePaintInspectionsTable(allPaintInspections);
+}
+
+function analyzeCurrentPaintInspection() {
+  if (!selectedPaintStandard) {
+    alert("Erro: Nenhuma inspeção ativa para analisar.");
+    return;
+  }
+  const l2 = parseFloat(document.getElementById("tinta_lab_l").value);
+  const a2 = parseFloat(document.getElementById("tinta_lab_a").value);
+  const b2 = parseFloat(document.getElementById("tinta_lab_b").value);
+  if (isNaN(l2) || isNaN(a2) || isNaN(b2)) {
+    alert("Valores medidos inválidos para diagnóstico.");
+    return;
+  }
+  analyzeInspectionInDiagnostic(selectedPaintStandard.l, selectedPaintStandard.a, selectedPaintStandard.b, l2, a2, b2);
+}
+
+window.showTintaSection = showTintaSection;
+window.drawColorOnCanvas = drawColorOnCanvas;
+window.loadPaintStandards = loadPaintStandards;
+window.searchPaintStandards = searchPaintStandards;
+window.selectPaintStandard = selectPaintStandard;
+window.updatePaintSampleCanvas = updatePaintSampleCanvas;
+window.inspectPaint = inspectPaint;
+window.tinta_goback = tinta_goback;
+window.registerNewPaint = registerNewPaint;
+window.updateNewPaintPreview = updateNewPaintPreview;
+window.updatePaintStandardsTable = updatePaintStandardsTable;
+window.editPaintStandard = editPaintStandard;
+window.deletePaintStandard = deletePaintStandard;
+window.loadPaintInspections = loadPaintInspections;
+window.updatePaintInspectionsTable = updatePaintInspectionsTable;
+window.searchPaintInspections = searchPaintInspections;
+window.clearPaintHistoryFilter = clearPaintHistoryFilter;
+window.analyzeCurrentPaintInspection = analyzeCurrentPaintInspection;
 
